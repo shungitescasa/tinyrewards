@@ -106,6 +106,8 @@ func convertToOgg(ctx context.Context, src, format, dst string, maxDuration time
 		"-t", strconv.FormatFloat(limit.Seconds(), 'f', -1, 64),
 		"-c:a", "libvorbis",
 		"-q:a", "5",
+		"-flags:a", "+bitexact",
+		"-fflags", "+bitexact",
 		"-f", "ogg",
 		"-y", dst,
 	)

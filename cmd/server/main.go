@@ -1,16 +1,22 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
 	"git.shungites.casa/tiny/rewards/internal/config"
+	"git.shungites.casa/tiny/rewards/internal/database"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
 )
 
-const multipartOverhead = 1 << 20
+const (
+	multipartOverhead = 1 << 20
+	dbStartupTimeout  = 30 * time.Second
+)
 
 func main() {
 	configPath := flag.String("config", config.DefaultPath, "path to the ini configuration file")
@@ -28,8 +34,16 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), dbStartupTimeout)
+	db, err := database.Open(ctx, cfg.Database.DSN)
+	cancel()
+	if err != nil {
+		log.Fatalf("database: %v", err)
+	}
+	defer db.Close()
+
 	app := fiber.New(fiber.Config{
-		BodyLimit: int(cfg.Sounds.MaxSize + multipartOverhead),
+		BodyLimit: int(cfg.Files.MaxSize + multipartOverhead),
 	})
 
 	app.Get("/", func(c fiber.Ctx) error {
@@ -37,9 +51,11 @@ func main() {
 	})
 
 	soundHandler, err := sounds.NewHandler(sounds.Options{
-		Directory:   cfg.Sounds.Directory,
-		MaxSize:     cfg.Sounds.MaxSize,
-		MaxDuration: cfg.Sounds.MaxDuration,
+		DB:          db,
+		Directory:   cfg.Files.Directory,
+		MaxSize:     cfg.Files.MaxSize,
+		MaxDuration: cfg.Files.MaxDuration,
+		Deduplicate: cfg.Files.Deduplicate,
 	})
 	if err != nil {
 		log.Fatalf("sounds: %v", err)

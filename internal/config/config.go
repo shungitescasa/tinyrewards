@@ -17,15 +17,21 @@ type Server struct {
 	Address string
 }
 
-type Sounds struct {
+type Files struct {
 	Directory   string
 	MaxSize     int64
 	MaxDuration time.Duration
+	Deduplicate bool
+}
+
+type Database struct {
+	DSN string
 }
 
 type Config struct {
-	Server Server
-	Sounds Sounds
+	Server   Server
+	Database Database
+	Files    Files
 }
 
 func Default() Config {
@@ -33,10 +39,14 @@ func Default() Config {
 		Server: Server{
 			Address: ":3000",
 		},
-		Sounds: Sounds{
-			Directory:   "userdata/sounds",
+		Database: Database{
+			DSN: "tinyrewards:tinyrewards@tcp(127.0.0.1:3306)/tinyrewards",
+		},
+		Files: Files{
+			Directory:   "userdata/files",
 			MaxSize:     16 << 20,
 			MaxDuration: 10 * time.Second,
+			Deduplicate: true,
 		},
 	}
 }
@@ -55,23 +65,33 @@ func Load(path string, required bool) (Config, error) {
 	server := file.Section("server")
 	cfg.Server.Address = server.Key("address").MustString(cfg.Server.Address)
 
-	sounds := file.Section("sounds")
-	cfg.Sounds.Directory = sounds.Key("directory").MustString(cfg.Sounds.Directory)
+	cfg.Database.DSN = file.Section("database").Key("dsn").MustString(cfg.Database.DSN)
 
-	if key := sounds.Key("max_size"); key.String() != "" {
+	files := file.Section("files")
+	cfg.Files.Directory = files.Key("directory").MustString(cfg.Files.Directory)
+
+	if key := files.Key("max_size"); key.String() != "" {
 		size, err := ParseSize(key.String())
 		if err != nil {
-			return cfg, fmt.Errorf("%s: sounds.max_size: %w", path, err)
+			return cfg, fmt.Errorf("%s: files.max_size: %w", path, err)
 		}
-		cfg.Sounds.MaxSize = size
+		cfg.Files.MaxSize = size
 	}
 
-	if key := sounds.Key("max_duration"); key.String() != "" {
+	if key := files.Key("max_duration"); key.String() != "" {
 		d, err := time.ParseDuration(key.String())
 		if err != nil {
-			return cfg, fmt.Errorf("%s: sounds.max_duration: %w", path, err)
+			return cfg, fmt.Errorf("%s: files.max_duration: %w", path, err)
 		}
-		cfg.Sounds.MaxDuration = d
+		cfg.Files.MaxDuration = d
+	}
+
+	if key := files.Key("deduplicate"); key.String() != "" {
+		dedup, err := key.Bool()
+		if err != nil {
+			return cfg, fmt.Errorf("%s: files.deduplicate: %w", path, err)
+		}
+		cfg.Files.Deduplicate = dedup
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -84,12 +104,14 @@ func (c Config) validate() error {
 	switch {
 	case c.Server.Address == "":
 		return errors.New("server.address must not be empty")
-	case c.Sounds.Directory == "":
-		return errors.New("sounds.directory must not be empty")
-	case c.Sounds.MaxSize <= 0:
-		return errors.New("sounds.max_size must be positive")
-	case c.Sounds.MaxDuration <= 0:
-		return errors.New("sounds.max_duration must be positive")
+	case c.Database.DSN == "":
+		return errors.New("database.dsn must not be empty")
+	case c.Files.Directory == "":
+		return errors.New("files.directory must not be empty")
+	case c.Files.MaxSize <= 0:
+		return errors.New("files.max_size must be positive")
+	case c.Files.MaxDuration <= 0:
+		return errors.New("files.max_duration must be positive")
 	}
 	return nil
 }

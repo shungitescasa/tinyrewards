@@ -3,6 +3,7 @@ package sounds
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -17,9 +18,11 @@ import (
 const processTimeout = 30 * time.Second
 
 type Options struct {
+	DB          *sql.DB
 	Directory   string
 	MaxSize     int64
 	MaxDuration time.Duration
+	Deduplicate bool
 }
 
 type Handler struct {
@@ -69,7 +72,6 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 	}
 
 	id := rand.Text()
-	final := filepath.Join(h.opts.Directory, id+".ogg")
 	partial := filepath.Join(h.opts.Directory, "."+id+".part")
 
 	ctx, cancel := context.WithTimeout(c.Context(), processTimeout)
@@ -90,9 +92,31 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 		}
 	}
 
-	if err := os.Rename(partial, final); err != nil {
+	salt := ""
+	if !h.opts.Deduplicate {
+		salt = id
+	}
+	size, fileID, err := digest(partial, salt)
+	if err != nil {
 		os.Remove(partial)
 		return err
+	}
+
+	file := storedFile{
+		ID:        fileID,
+		Mime:      storedMime,
+		Extension: storedExtension,
+		Size:      size,
+	}
+	final := filepath.Join(h.opts.Directory, fileID+"."+storedExtension)
+
+	err = h.store(ctx, id, uploadName(fh.Filename), file, func() error {
+		return os.Rename(partial, final)
+	})
+	if err != nil {
+		os.Remove(partial)
+		log.Printf("sounds: storing upload: %v", err)
+		return fiber.ErrInternalServerError
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
