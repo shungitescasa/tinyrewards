@@ -58,11 +58,16 @@ func (h *Handler) store(ctx context.Context, uploadID, name string, file storedF
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		`INSERT INTO files (id, mime, extension, size) VALUES (?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE id = id`,
 		file.ID, file.Mime, file.Extension, file.Size,
-	); err != nil {
+	)
+	if err != nil {
+		return err
+	}
+	inserted, err := res.RowsAffected()
+	if err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO uploads (id, name) VALUES (?, ?)`, uploadID, name); err != nil {
@@ -72,8 +77,10 @@ func (h *Handler) store(ctx context.Context, uploadID, name string, file storedF
 		return err
 	}
 
-	if err := place(); err != nil {
-		return err
+	if inserted != 0 {
+		if err := place(); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

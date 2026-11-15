@@ -9,17 +9,18 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+
+	"git.shungites.casa/tiny/rewards/internal/storage"
 )
 
 const processTimeout = 30 * time.Second
 
 type Options struct {
 	DB          *sql.DB
-	Directory   string
+	Storage     storage.Storage
 	MaxSize     int64
 	MaxDuration time.Duration
 	Deduplicate bool
@@ -29,11 +30,8 @@ type Handler struct {
 	opts Options
 }
 
-func NewHandler(opts Options) (*Handler, error) {
-	if err := os.MkdirAll(opts.Directory, 0o755); err != nil {
-		return nil, err
-	}
-	return &Handler{opts: opts}, nil
+func NewHandler(opts Options) *Handler {
+	return &Handler{opts: opts}
 }
 
 func (h *Handler) Register(router fiber.Router) {
@@ -71,13 +69,20 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 		return err
 	}
 
+	out, err := os.CreateTemp("", "tinyrewards-sound-*."+storedExtension)
+	if err != nil {
+		return err
+	}
+	processed := out.Name()
+	out.Close()
+	defer os.Remove(processed)
+
 	id := rand.Text()
-	partial := filepath.Join(h.opts.Directory, "."+id+".part")
 
 	ctx, cancel := context.WithTimeout(c.Context(), processTimeout)
 	defer cancel()
 
-	duration, err := Process(ctx, tmp.Name(), partial, h.opts.MaxDuration)
+	duration, err := Process(ctx, tmp.Name(), processed, h.opts.MaxDuration)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrUnsupportedFormat):
@@ -96,9 +101,8 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 	if !h.opts.Deduplicate {
 		salt = id
 	}
-	size, fileID, err := digest(partial, salt)
+	size, fileID, err := digest(processed, salt)
 	if err != nil {
-		os.Remove(partial)
 		return err
 	}
 
@@ -108,13 +112,17 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 		Extension: storedExtension,
 		Size:      size,
 	}
-	final := filepath.Join(h.opts.Directory, fileID+"."+storedExtension)
+	key := fileID + "." + storedExtension
 
 	err = h.store(ctx, id, uploadName(fh.Filename), file, func() error {
-		return os.Rename(partial, final)
+		f, err := os.Open(processed)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		return h.opts.Storage.Put(ctx, key, f, size, storedMime)
 	})
 	if err != nil {
-		os.Remove(partial)
 		log.Printf("sounds: storing upload: %v", err)
 		return fiber.ErrInternalServerError
 	}
