@@ -10,6 +10,7 @@ import (
 
 	"git.shungites.casa/tiny/rewards/internal/config"
 	"git.shungites.casa/tiny/rewards/internal/database"
+	"git.shungites.casa/tiny/rewards/internal/middleware"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
 	"git.shungites.casa/tiny/rewards/internal/storage"
 )
@@ -47,6 +48,8 @@ func main() {
 	app := fiber.New(fiber.Config{
 		BodyLimit: int(cfg.Files.MaxSize + multipartOverhead),
 	})
+
+	app.Use(middleware.JSON())
 
 	app.Get("/", func(c fiber.Ctx) error {
 		return c.SendString("Hello, World!")
