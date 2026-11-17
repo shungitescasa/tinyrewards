@@ -41,6 +41,11 @@ func (h *Handler) Register(router fiber.Router) {
 }
 
 func (h *Handler) Upload(c fiber.Ctx) error {
+	code, err := uploadCode(c.FormValue("code"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
 	fh, err := c.FormFile("sound")
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, `missing "sound" file field`)
@@ -116,7 +121,7 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 	}
 	key := fileID + "." + storedExtension
 
-	err = h.store(ctx, id, uploadName(fh.Filename), file, func() error {
+	err = h.store(ctx, id, code, file, func() error {
 		f, err := os.Open(processed)
 		if err != nil {
 			return err

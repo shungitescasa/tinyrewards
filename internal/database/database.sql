@@ -8,9 +8,10 @@ CREATE TABLE IF NOT EXISTS files (
 
 CREATE TABLE IF NOT EXISTS uploads (
     id VARCHAR(32) CHARACTER SET ascii NOT NULL,
-    name VARCHAR(255) NOT NULL,
+    code VARCHAR(255) NOT NULL,
     uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    KEY uploads_uploaded_at (uploaded_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS upload_files (

@@ -4,17 +4,25 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
+	"unicode"
 	"unicode/utf8"
+)
+
+var (
+	ErrMissingCode = errors.New(`missing "code" field`)
+	ErrInvalidCode = errors.New("code contains invalid characters")
+	ErrCodeTooLong = fmt.Errorf("code exceeds %d characters", maxCodeLength)
 )
 
 const (
 	storedMime      = "audio/ogg"
 	storedExtension = "ogg"
-	maxNameLength   = 255
+	maxCodeLength   = 255
 )
 
 type storedFile struct {
@@ -40,18 +48,22 @@ func digest(path, salt string) (int64, string, error) {
 	return n, hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func uploadName(filename string) string {
-	name := strings.ToValidUTF8(filepath.Base(filename), "")
-	if name == "." || name == "/" {
-		return ""
+func uploadCode(raw string) (string, error) {
+	code := strings.TrimSpace(raw)
+	switch {
+	case code == "":
+		return "", ErrMissingCode
+	case !utf8.ValidString(code):
+		return "", ErrInvalidCode
+	case utf8.RuneCountInString(code) > maxCodeLength:
+		return "", ErrCodeTooLong
+	case strings.IndexFunc(code, unicode.IsControl) >= 0:
+		return "", ErrInvalidCode
 	}
-	if utf8.RuneCountInString(name) > maxNameLength {
-		name = string([]rune(name)[:maxNameLength])
-	}
-	return name
+	return code, nil
 }
 
-func (h *Handler) store(ctx context.Context, uploadID, name string, file storedFile, place func() error) error {
+func (h *Handler) store(ctx context.Context, uploadID, code string, file storedFile, place func() error) error {
 	tx, err := h.opts.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -70,7 +82,7 @@ func (h *Handler) store(ctx context.Context, uploadID, name string, file storedF
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO uploads (id, name) VALUES (?, ?)`, uploadID, name); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO uploads (id, code) VALUES (?, ?)`, uploadID, code); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO upload_files (upload_id, file_id) VALUES (?, ?)`, uploadID, file.ID); err != nil {

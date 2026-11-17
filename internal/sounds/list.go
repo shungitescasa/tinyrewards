@@ -25,7 +25,7 @@ type listedFile struct {
 
 type listedUpload struct {
 	ID         string       `json:"id"`
-	Name       string       `json:"name"`
+	Code       string       `json:"code"`
 	UploadedAt time.Time    `json:"uploaded_at"`
 	Files      []listedFile `json:"files"`
 }
@@ -65,9 +65,9 @@ func (h *Handler) list(ctx context.Context, direction string, limit, offset int6
 	items := []listedUpload{}
 
 	query := fmt.Sprintf(
-		`SELECT u.id, u.name, u.uploaded_at, f.id, f.mime, f.extension, f.size
+		`SELECT u.id, u.code, u.uploaded_at, f.id, f.mime, f.extension, f.size
 		 FROM (
-		     SELECT id, name, uploaded_at FROM uploads
+		     SELECT id, code, uploaded_at FROM uploads
 		     ORDER BY uploaded_at %[1]s, id %[1]s
 		     LIMIT ? OFFSET ?
 		 ) u
@@ -90,7 +90,7 @@ func (h *Handler) list(ctx context.Context, direction string, limit, offset int6
 			extension *string
 			size      *int64
 		)
-		if err := rows.Scan(&u.ID, &u.Name, &u.UploadedAt, &fileID, &mime, &extension, &size); err != nil {
+		if err := rows.Scan(&u.ID, &u.Code, &u.UploadedAt, &fileID, &mime, &extension, &size); err != nil {
 			return nil, err
 		}
 		if n := len(items); n == 0 || items[n-1].ID != u.ID {
