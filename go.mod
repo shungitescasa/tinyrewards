@@ -6,6 +6,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.2
 	github.com/gofiber/fiber/v3 v3.7.0
 	github.com/minio/minio-go/v7 v7.4.1
+	golang.org/x/oauth2 v0.37.0
 	gopkg.in/ini.v1 v1.68.0
 )
 

@@ -14,6 +14,8 @@ import (
 
 const DefaultPath = "tinyrewards.ini"
 
+const MinSecretLength = 32
+
 const (
 	StorageLocal = "local"
 	StorageS3    = "s3"
@@ -50,12 +52,29 @@ type S3 struct {
 	ForcePathStyle bool
 }
 
+type Twitch struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+}
+
+func (t Twitch) Enabled() bool {
+	return t.ClientID != ""
+}
+
+type Auth struct {
+	Secret   string
+	TokenTTL time.Duration
+}
+
 type Config struct {
 	Server   Server
 	Database Database
 	Files    Files
 	Sounds   Sounds
 	S3       S3
+	Twitch   Twitch
+	Auth     Auth
 }
 
 func Default() Config {
@@ -79,6 +98,9 @@ func Default() Config {
 		S3: S3{
 			Endpoint: "s3.amazonaws.com",
 			Secure:   true,
+		},
+		Auth: Auth{
+			TokenTTL: 7 * 24 * time.Hour,
 		},
 	}
 }
@@ -158,6 +180,21 @@ func Load(path string, required bool) (Config, error) {
 		cfg.S3.ForcePathStyle = pathStyle
 	}
 
+	twitch := file.Section("twitch")
+	cfg.Twitch.ClientID = twitch.Key("client_id").MustString(cfg.Twitch.ClientID)
+	cfg.Twitch.ClientSecret = twitch.Key("client_secret").MustString(cfg.Twitch.ClientSecret)
+	cfg.Twitch.RedirectURL = twitch.Key("redirect_url").MustString(cfg.Twitch.RedirectURL)
+
+	auth := file.Section("auth")
+	cfg.Auth.Secret = auth.Key("secret").MustString(cfg.Auth.Secret)
+	if key := auth.Key("token_ttl"); key.String() != "" {
+		d, err := time.ParseDuration(key.String())
+		if err != nil {
+			return cfg, fmt.Errorf("%s: auth.token_ttl: %w", path, err)
+		}
+		cfg.Auth.TokenTTL = d
+	}
+
 	if err := cfg.validate(); err != nil {
 		return cfg, fmt.Errorf("%s: %w", path, err)
 	}
@@ -176,6 +213,14 @@ func (c Config) validate() error {
 		return errors.New("files.max_duration must be positive")
 	case c.Sounds.PageSize <= 0:
 		return errors.New("sounds.page_size must be positive")
+	case c.Auth.TokenTTL <= 0:
+		return errors.New("auth.token_ttl must be positive")
+	case c.Auth.Secret != "" && len(c.Auth.Secret) < MinSecretLength:
+		return fmt.Errorf("auth.secret must be at least %d bytes", MinSecretLength)
+	}
+
+	if err := c.Twitch.validate(); err != nil {
+		return err
 	}
 
 	switch c.Files.Storage {
@@ -194,6 +239,28 @@ func (c Config) validate() error {
 		}
 	default:
 		return fmt.Errorf("files.storage must be %q or %q, got %q", StorageLocal, StorageS3, c.Files.Storage)
+	}
+	return nil
+}
+
+func (t Twitch) validate() error {
+	if t.ClientID == "" && t.ClientSecret == "" && t.RedirectURL == "" {
+		return nil
+	}
+	switch {
+	case t.ClientID == "":
+		return errors.New("twitch.client_id must not be empty")
+	case t.ClientSecret == "":
+		return errors.New("twitch.client_secret must not be empty")
+	case t.RedirectURL == "":
+		return errors.New("twitch.redirect_url must not be empty")
+	}
+	u, err := url.Parse(t.RedirectURL)
+	if err != nil {
+		return fmt.Errorf("twitch.redirect_url: %w", err)
+	}
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("twitch.redirect_url must be an absolute http(s) URL, got %q", t.RedirectURL)
 	}
 	return nil
 }

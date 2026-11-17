@@ -1,3 +1,21 @@
+CREATE TABLE IF NOT EXISTS users (
+    id CHAR(32) CHARACTER SET ascii NOT NULL DEFAULT (REPLACE(UUID(), '-', '')),
+    username VARCHAR(255) NOT NULL,
+    joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY users_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS connections (
+    user_id CHAR(32) CHARACTER SET ascii NOT NULL,
+    platform VARCHAR(32) CHARACTER SET ascii NOT NULL,
+    alias_id VARCHAR(255) NOT NULL,
+    connected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, platform),
+    UNIQUE KEY connections_alias (platform, alias_id),
+    CONSTRAINT connections_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS files (
     id CHAR(64) CHARACTER SET ascii NOT NULL,
     mime VARCHAR(255) NOT NULL,

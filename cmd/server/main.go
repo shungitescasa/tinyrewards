@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"flag"
 	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 
+	"git.shungites.casa/tiny/rewards/internal/account"
 	"git.shungites.casa/tiny/rewards/internal/config"
 	"git.shungites.casa/tiny/rewards/internal/database"
 	"git.shungites.casa/tiny/rewards/internal/middleware"
@@ -67,6 +69,29 @@ func main() {
 		MaxDuration: cfg.Files.MaxDuration,
 		Deduplicate: cfg.Files.Deduplicate,
 		PageSize:    cfg.Sounds.PageSize,
+	}).Register(app)
+
+	var twitch *account.TwitchOptions
+	if cfg.Twitch.Enabled() {
+		twitch = &account.TwitchOptions{
+			ClientID:     cfg.Twitch.ClientID,
+			ClientSecret: cfg.Twitch.ClientSecret,
+			RedirectURL:  cfg.Twitch.RedirectURL,
+		}
+	} else {
+		log.Print("twitch: client_id is not set, /account/login/twitch is disabled")
+	}
+	secret := []byte(cfg.Auth.Secret)
+	if len(secret) == 0 {
+		secret = make([]byte, config.MinSecretLength)
+		rand.Read(secret)
+		log.Print("auth: secret is not set, using a random one; tokens will not survive a restart")
+	}
+	account.NewHandler(account.Options{
+		DB:          db,
+		Twitch:      twitch,
+		TokenSecret: secret,
+		TokenTTL:    cfg.Auth.TokenTTL,
 	}).Register(app)
 
 	log.Fatal(app.Listen(cfg.Server.Address))
