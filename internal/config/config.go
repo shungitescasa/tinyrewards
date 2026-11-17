@@ -34,7 +34,8 @@ type Files struct {
 }
 
 type Sounds struct {
-	PageSize int
+	PageSize         int
+	AnonymousUploads bool
 }
 
 type Database struct {
@@ -93,7 +94,8 @@ func Default() Config {
 			Deduplicate: true,
 		},
 		Sounds: Sounds{
-			PageSize: 20,
+			PageSize:         20,
+			AnonymousUploads: true,
 		},
 		S3: S3{
 			Endpoint: "s3.amazonaws.com",
@@ -149,7 +151,16 @@ func Load(path string, required bool) (Config, error) {
 		cfg.Files.Deduplicate = dedup
 	}
 
-	if key := file.Section("sounds").Key("page_size"); key.String() != "" {
+	sounds := file.Section("sounds")
+	if key := sounds.Key("anonymous_uploads"); key.String() != "" {
+		anonymous, err := key.Bool()
+		if err != nil {
+			return cfg, fmt.Errorf("%s: sounds.anonymous_uploads: %w", path, err)
+		}
+		cfg.Sounds.AnonymousUploads = anonymous
+	}
+
+	if key := sounds.Key("page_size"); key.String() != "" {
 		pageSize, err := key.Int()
 		if err != nil {
 			return cfg, fmt.Errorf("%s: sounds.page_size: %w", path, err)

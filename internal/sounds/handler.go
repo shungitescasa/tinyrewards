@@ -13,6 +13,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"git.shungites.casa/tiny/rewards/internal/account"
 	"git.shungites.casa/tiny/rewards/internal/storage"
 )
 
@@ -25,6 +26,9 @@ type Options struct {
 	MaxDuration time.Duration
 	Deduplicate bool
 	PageSize    int
+
+	AnonymousUploads bool
+	Authenticate     fiber.Handler
 }
 
 type Handler struct {
@@ -37,10 +41,15 @@ func NewHandler(opts Options) *Handler {
 
 func (h *Handler) Register(router fiber.Router) {
 	router.Get("/sounds", h.List)
-	router.Post("/sounds/upload", h.Upload)
+	router.Post("/sounds/upload", h.opts.Authenticate, h.Upload)
 }
 
 func (h *Handler) Upload(c fiber.Ctx) error {
+	userID := account.UserID(c)
+	if userID == "" && !h.opts.AnonymousUploads {
+		return fiber.NewError(fiber.StatusUnauthorized, "authentication is required to upload sounds")
+	}
+
 	code, err := uploadCode(c.FormValue("code"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
@@ -121,7 +130,7 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 	}
 	key := fileID + "." + storedExtension
 
-	err = h.store(ctx, id, code, file, func() error {
+	err = h.store(ctx, id, code, userID, file, func() error {
 		f, err := os.Open(processed)
 		if err != nil {
 			return err

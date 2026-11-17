@@ -62,15 +62,6 @@ func main() {
 		log.Fatalf("storage: %v", err)
 	}
 
-	sounds.NewHandler(sounds.Options{
-		DB:          db,
-		Storage:     store,
-		MaxSize:     cfg.Files.MaxSize,
-		MaxDuration: cfg.Files.MaxDuration,
-		Deduplicate: cfg.Files.Deduplicate,
-		PageSize:    cfg.Sounds.PageSize,
-	}).Register(app)
-
 	var twitch *account.TwitchOptions
 	if cfg.Twitch.Enabled() {
 		twitch = &account.TwitchOptions{
@@ -87,11 +78,23 @@ func main() {
 		rand.Read(secret)
 		log.Print("auth: secret is not set, using a random one; tokens will not survive a restart")
 	}
-	account.NewHandler(account.Options{
+	accounts := account.NewHandler(account.Options{
 		DB:          db,
 		Twitch:      twitch,
 		TokenSecret: secret,
 		TokenTTL:    cfg.Auth.TokenTTL,
+	})
+	accounts.Register(app)
+
+	sounds.NewHandler(sounds.Options{
+		DB:               db,
+		Storage:          store,
+		MaxSize:          cfg.Files.MaxSize,
+		MaxDuration:      cfg.Files.MaxDuration,
+		Deduplicate:      cfg.Files.Deduplicate,
+		PageSize:         cfg.Sounds.PageSize,
+		AnonymousUploads: cfg.Sounds.AnonymousUploads,
+		Authenticate:     accounts.OptionalAuthenticate,
 	}).Register(app)
 
 	log.Fatal(app.Listen(cfg.Server.Address))

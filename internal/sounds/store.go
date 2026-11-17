@@ -3,6 +3,7 @@ package sounds
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -63,7 +64,7 @@ func uploadCode(raw string) (string, error) {
 	return code, nil
 }
 
-func (h *Handler) store(ctx context.Context, uploadID, code string, file storedFile, place func() error) error {
+func (h *Handler) store(ctx context.Context, uploadID, code, userID string, file storedFile, place func() error) error {
 	tx, err := h.opts.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -82,7 +83,9 @@ func (h *Handler) store(ctx context.Context, uploadID, code string, file storedF
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO uploads (id, code) VALUES (?, ?)`, uploadID, code); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO uploads (id, code, user_id) VALUES (?, ?, ?)`,
+		uploadID, code, sql.NullString{String: userID, Valid: userID != ""},
+	); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO upload_files (upload_id, file_id) VALUES (?, ?)`, uploadID, file.ID); err != nil {

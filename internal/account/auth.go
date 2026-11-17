@@ -13,7 +13,19 @@ import (
 type userIDKey struct{}
 
 func (h *Handler) Authenticate(c fiber.Ctx) error {
-	scheme, token, ok := strings.Cut(c.Get(fiber.HeaderAuthorization), " ")
+	return h.authenticate(c, true)
+}
+
+func (h *Handler) OptionalAuthenticate(c fiber.Ctx) error {
+	return h.authenticate(c, false)
+}
+
+func (h *Handler) authenticate(c fiber.Ctx, required bool) error {
+	header := c.Get(fiber.HeaderAuthorization)
+	if header == "" && !required {
+		return c.Next()
+	}
+	scheme, token, ok := strings.Cut(header, " ")
 	if !ok || !strings.EqualFold(scheme, "Bearer") {
 		return fiber.NewError(fiber.StatusUnauthorized, "missing bearer token")
 	}
