@@ -66,6 +66,7 @@ func main() {
 		MaxSize:     cfg.Files.MaxSize,
 		MaxDuration: cfg.Files.MaxDuration,
 		Deduplicate: cfg.Files.Deduplicate,
+		PageSize:    cfg.Sounds.PageSize,
 	}).Register(app)
 
 	log.Fatal(app.Listen(cfg.Server.Address))

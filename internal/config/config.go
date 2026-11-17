@@ -31,6 +31,10 @@ type Files struct {
 	Deduplicate bool
 }
 
+type Sounds struct {
+	PageSize int
+}
+
 type Database struct {
 	DSN string
 }
@@ -50,6 +54,7 @@ type Config struct {
 	Server   Server
 	Database Database
 	Files    Files
+	Sounds   Sounds
 	S3       S3
 }
 
@@ -67,6 +72,9 @@ func Default() Config {
 			MaxSize:     16 << 20,
 			MaxDuration: 10 * time.Second,
 			Deduplicate: true,
+		},
+		Sounds: Sounds{
+			PageSize: 20,
 		},
 		S3: S3{
 			Endpoint: "s3.amazonaws.com",
@@ -119,6 +127,14 @@ func Load(path string, required bool) (Config, error) {
 		cfg.Files.Deduplicate = dedup
 	}
 
+	if key := file.Section("sounds").Key("page_size"); key.String() != "" {
+		pageSize, err := key.Int()
+		if err != nil {
+			return cfg, fmt.Errorf("%s: sounds.page_size: %w", path, err)
+		}
+		cfg.Sounds.PageSize = pageSize
+	}
+
 	s3 := file.Section("s3")
 	if key := s3.Key("endpoint"); key.String() != "" {
 		host, secure, err := parseEndpoint(key.String())
@@ -158,6 +174,8 @@ func (c Config) validate() error {
 		return errors.New("files.max_size must be positive")
 	case c.Files.MaxDuration <= 0:
 		return errors.New("files.max_duration must be positive")
+	case c.Sounds.PageSize <= 0:
+		return errors.New("sounds.page_size must be positive")
 	}
 
 	switch c.Files.Storage {

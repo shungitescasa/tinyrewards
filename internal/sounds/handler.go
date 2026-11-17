@@ -24,6 +24,7 @@ type Options struct {
 	MaxSize     int64
 	MaxDuration time.Duration
 	Deduplicate bool
+	PageSize    int
 }
 
 type Handler struct {
@@ -35,6 +36,7 @@ func NewHandler(opts Options) *Handler {
 }
 
 func (h *Handler) Register(router fiber.Router) {
+	router.Get("/sounds", h.List)
 	router.Post("/sounds/upload", h.Upload)
 }
 
