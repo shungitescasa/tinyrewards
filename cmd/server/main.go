@@ -12,6 +12,7 @@ import (
 	"git.shungites.casa/tiny/rewards/internal/account"
 	"git.shungites.casa/tiny/rewards/internal/config"
 	"git.shungites.casa/tiny/rewards/internal/database"
+	"git.shungites.casa/tiny/rewards/internal/emotes"
 	"git.shungites.casa/tiny/rewards/internal/middleware"
 	"git.shungites.casa/tiny/rewards/internal/rewards"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
@@ -64,14 +65,19 @@ func main() {
 	}
 
 	var twitch *account.TwitchOptions
+	var twitchCredentials *emotes.TwitchCredentials
 	if cfg.Twitch.Enabled() {
+		twitchCredentials = &emotes.TwitchCredentials{
+			ClientID:     cfg.Twitch.ClientID,
+			ClientSecret: cfg.Twitch.ClientSecret,
+		}
 		twitch = &account.TwitchOptions{
 			ClientID:     cfg.Twitch.ClientID,
 			ClientSecret: cfg.Twitch.ClientSecret,
 			RedirectURL:  cfg.Twitch.RedirectURL,
 		}
 	} else {
-		log.Print("twitch: client_id is not set, /account/login/twitch is disabled")
+		log.Print("twitch: client_id is not set, /account/login/twitch and twitch emote rewards are disabled")
 	}
 	secret := []byte(cfg.Auth.Secret)
 	if len(secret) == 0 {
@@ -101,6 +107,7 @@ func main() {
 	rewards.NewHandler(rewards.Options{
 		DB:           db,
 		Authenticate: accounts.Authenticate,
+		Emotes:       emotes.NewChecker(twitchCredentials),
 	}).Register(app)
 
 	log.Fatal(app.Listen(cfg.Server.Address))

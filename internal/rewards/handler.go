@@ -11,11 +11,13 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"git.shungites.casa/tiny/rewards/internal/account"
+	"git.shungites.casa/tiny/rewards/internal/emotes"
 )
 
 type Options struct {
 	DB           *sql.DB
 	Authenticate fiber.Handler
+	Emotes       *emotes.Checker
 }
 
 type Handler struct {
@@ -38,7 +40,7 @@ func (h *Handler) Add(c fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
-	data, err := parseData(c.FormValue("data"))
+	data, err := parseData(rewardType, c.FormValue("data"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
@@ -47,12 +49,27 @@ func (h *Handler) Add(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, `missing "upload_id" field`)
 	}
 
+	if rewardType == TypeChatEmote {
+		err := h.verifyEmote(c.Context(), userID, data)
+		switch {
+		case errors.Is(err, ErrEmoteNotFound):
+			return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
+		case errors.Is(err, emotes.ErrProviderDisabled):
+			return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
+		case err != nil:
+			log.Printf("rewards: verifying emote %s: %v", data, err)
+			return fiber.ErrBadGateway
+		}
+	}
+
 	id := rand.Text()
 	err = h.insert(c.Context(), id, userID, rewardType, data, uploadID)
 	switch {
 	case errors.Is(err, ErrUploadNotFound):
 		return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
-	case isForeignKeyViolation(err):
+	case errors.Is(err, ErrDuplicate):
+		return fiber.NewError(fiber.StatusConflict, err.Error())
+	case isMySQLError(err, mysqlNoReferencedRow):
 		return fiber.NewError(fiber.StatusUnauthorized, "user no longer exists")
 	case err != nil:
 		log.Printf("rewards: adding reward: %v", err)

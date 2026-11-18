@@ -2,6 +2,7 @@ package rewards
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,15 +11,22 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
+	"git.shungites.casa/tiny/rewards/internal/account"
+	"git.shungites.casa/tiny/rewards/internal/emotes"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
 )
 
-const TypeChat = "chat"
+const (
+	TypeChat      = "chat"
+	TypeChatEmote = "chat_emote"
+)
 
-var types = []string{TypeChat}
+var types = []string{TypeChat, TypeChatEmote}
 
 const (
 	maxDataLength        = 65535
+	maxEmoteIDLength     = 64
+	mysqlDuplicateEntry  = 1062
 	mysqlNoReferencedRow = 1452
 	columnID             = "r.id"
 	columnUserID         = "r.user_id"
@@ -30,7 +38,10 @@ var (
 	ErrMissingData    = errors.New(`missing "data" field`)
 	ErrInvalidData    = errors.New("data is not valid UTF-8")
 	ErrDataTooLong    = fmt.Errorf("data exceeds %d bytes", maxDataLength)
+	ErrInvalidEmote   = fmt.Errorf("emote must be in the form <provider>:<emote_id>, where provider is one of: %s", strings.Join(emotes.Providers, ", "))
+	ErrEmoteNotFound  = errors.New("emote is not available in the user's channel or globally")
 	ErrUploadNotFound = errors.New("upload not found")
+	ErrDuplicate      = errors.New("reward with this type and data already exists")
 )
 
 type Reward struct {
@@ -55,7 +66,7 @@ func parseType(raw string) (string, error) {
 	return "", ErrInvalidType
 }
 
-func parseData(raw string) (string, error) {
+func parseData(rewardType, raw string) (string, error) {
 	data := strings.TrimSpace(raw)
 	switch {
 	case data == "":
@@ -65,7 +76,71 @@ func parseData(raw string) (string, error) {
 	case len(data) > maxDataLength:
 		return "", ErrDataTooLong
 	}
+	if rewardType == TypeChatEmote {
+		provider, id, err := parseEmote(data)
+		if err != nil {
+			return "", err
+		}
+		return provider + ":" + id, nil
+	}
 	return data, nil
+}
+
+func parseEmote(data string) (string, string, error) {
+	provider, id, ok := strings.Cut(data, ":")
+	if !ok {
+		return "", "", ErrInvalidEmote
+	}
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	id = strings.TrimSpace(id)
+
+	known := false
+	for _, p := range emotes.Providers {
+		if provider == p {
+			known = true
+			break
+		}
+	}
+	if !known || id == "" || len(id) > maxEmoteIDLength {
+		return "", "", ErrInvalidEmote
+	}
+	for _, r := range id {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+			return "", "", ErrInvalidEmote
+		}
+	}
+	return provider, id, nil
+}
+
+func (h *Handler) verifyEmote(ctx context.Context, userID, data string) error {
+	provider, id, err := parseEmote(data)
+	if err != nil {
+		return err
+	}
+	twitchUserID, err := h.twitchUserID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	ok, err := h.opts.Emotes.Exists(ctx, provider, twitchUserID, id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrEmoteNotFound
+	}
+	return nil
+}
+
+func (h *Handler) twitchUserID(ctx context.Context, userID string) (string, error) {
+	var aliasID string
+	err := h.opts.DB.QueryRowContext(ctx,
+		`SELECT alias_id FROM connections WHERE user_id = ? AND platform = ?`,
+		userID, account.PlatformTwitch,
+	).Scan(&aliasID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return aliasID, err
 }
 
 func (h *Handler) insert(ctx context.Context, id, userID, rewardType, data, uploadID string) error {
@@ -74,6 +149,9 @@ func (h *Handler) insert(ctx context.Context, id, userID, rewardType, data, uplo
 		 SELECT ?, ?, ?, ?, id FROM uploads WHERE id = ?`,
 		id, userID, rewardType, data, uploadID,
 	)
+	if isMySQLError(err, mysqlDuplicateEntry) {
+		return ErrDuplicate
+	}
 	if err != nil {
 		return err
 	}
@@ -148,7 +226,7 @@ func (h *Handler) userExists(ctx context.Context, userID string) (bool, error) {
 	return exists, err
 }
 
-func isForeignKeyViolation(err error) bool {
+func isMySQLError(err error, number uint16) bool {
 	var me *mysql.MySQLError
-	return errors.As(err, &me) && me.Number == mysqlNoReferencedRow
+	return errors.As(err, &me) && me.Number == number
 }
