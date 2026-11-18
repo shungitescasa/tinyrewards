@@ -43,3 +43,17 @@ CREATE TABLE IF NOT EXISTS upload_files (
     CONSTRAINT upload_files_upload FOREIGN KEY (upload_id) REFERENCES uploads (id) ON DELETE CASCADE,
     CONSTRAINT upload_files_file FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS rewards (
+    id VARCHAR(32) CHARACTER SET ascii NOT NULL,
+    user_id CHAR(32) CHARACTER SET ascii NOT NULL,
+    type VARCHAR(32) CHARACTER SET ascii NOT NULL,
+    data TEXT NOT NULL,
+    upload_id VARCHAR(32) CHARACTER SET ascii NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY rewards_user_id (user_id, created_at, id),
+    KEY rewards_upload_id (upload_id),
+    CONSTRAINT rewards_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT rewards_upload FOREIGN KEY (upload_id) REFERENCES uploads (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

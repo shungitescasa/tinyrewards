@@ -13,6 +13,7 @@ import (
 	"git.shungites.casa/tiny/rewards/internal/config"
 	"git.shungites.casa/tiny/rewards/internal/database"
 	"git.shungites.casa/tiny/rewards/internal/middleware"
+	"git.shungites.casa/tiny/rewards/internal/rewards"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
 	"git.shungites.casa/tiny/rewards/internal/storage"
 )
@@ -95,6 +96,11 @@ func main() {
 		PageSize:         cfg.Sounds.PageSize,
 		AnonymousUploads: cfg.Sounds.AnonymousUploads,
 		Authenticate:     accounts.OptionalAuthenticate,
+	}).Register(app)
+
+	rewards.NewHandler(rewards.Options{
+		DB:           db,
+		Authenticate: accounts.Authenticate,
 	}).Register(app)
 
 	log.Fatal(app.Listen(cfg.Server.Address))

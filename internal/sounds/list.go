@@ -16,19 +16,19 @@ const (
 	SortOldest = "oldest"
 )
 
-type listedFile struct {
+type File struct {
 	ID        string `json:"id"`
 	Mime      string `json:"mime"`
 	Extension string `json:"extension"`
 	Size      int64  `json:"size"`
 }
 
-type listedUpload struct {
-	ID         string       `json:"id"`
-	Code       string       `json:"code"`
-	UserID     *string      `json:"user_id"`
-	UploadedAt time.Time    `json:"uploaded_at"`
-	Files      []listedFile `json:"files"`
+type Upload struct {
+	ID         string    `json:"id"`
+	Code       string    `json:"code"`
+	UserID     *string   `json:"user_id"`
+	UploadedAt time.Time `json:"uploaded_at"`
+	Files      []File    `json:"files"`
 }
 
 func (h *Handler) List(c fiber.Ctx) error {
@@ -62,8 +62,8 @@ func (h *Handler) List(c fiber.Ctx) error {
 	return c.JSON(items)
 }
 
-func (h *Handler) list(ctx context.Context, direction string, limit, offset int64) ([]listedUpload, error) {
-	items := []listedUpload{}
+func (h *Handler) list(ctx context.Context, direction string, limit, offset int64) ([]Upload, error) {
+	items := []Upload{}
 
 	query := fmt.Sprintf(
 		`SELECT u.id, u.code, u.user_id, u.uploaded_at, f.id, f.mime, f.extension, f.size
@@ -85,7 +85,7 @@ func (h *Handler) list(ctx context.Context, direction string, limit, offset int6
 
 	for rows.Next() {
 		var (
-			u         listedUpload
+			u         Upload
 			fileID    *string
 			mime      *string
 			extension *string
@@ -95,12 +95,12 @@ func (h *Handler) list(ctx context.Context, direction string, limit, offset int6
 			return nil, err
 		}
 		if n := len(items); n == 0 || items[n-1].ID != u.ID {
-			u.Files = []listedFile{}
+			u.Files = []File{}
 			items = append(items, u)
 		}
 		if fileID != nil {
 			last := &items[len(items)-1]
-			last.Files = append(last.Files, listedFile{
+			last.Files = append(last.Files, File{
 				ID:        *fileID,
 				Mime:      *mime,
 				Extension: *extension,
