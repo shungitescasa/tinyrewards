@@ -22,7 +22,8 @@ const (
 )
 
 type Server struct {
-	Address string
+	Address   string
+	PublicURL string
 }
 
 type Files struct {
@@ -120,6 +121,7 @@ func Load(path string, required bool) (Config, error) {
 
 	server := file.Section("server")
 	cfg.Server.Address = server.Key("address").MustString(cfg.Server.Address)
+	cfg.Server.PublicURL = strings.TrimRight(strings.TrimSpace(server.Key("public_url").MustString(cfg.Server.PublicURL)), "/")
 
 	cfg.Database.DSN = file.Section("database").Key("dsn").MustString(cfg.Database.DSN)
 
@@ -228,6 +230,16 @@ func (c Config) validate() error {
 		return errors.New("auth.token_ttl must be positive")
 	case c.Auth.Secret != "" && len(c.Auth.Secret) < MinSecretLength:
 		return fmt.Errorf("auth.secret must be at least %d bytes", MinSecretLength)
+	}
+
+	if c.Server.PublicURL != "" {
+		u, err := url.Parse(c.Server.PublicURL)
+		if err != nil {
+			return fmt.Errorf("server.public_url: %w", err)
+		}
+		if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("server.public_url must be an absolute http(s) URL, got %q", c.Server.PublicURL)
+		}
 	}
 
 	if err := c.Twitch.validate(); err != nil {

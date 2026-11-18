@@ -12,12 +12,14 @@ import (
 
 	"git.shungites.casa/tiny/rewards/internal/account"
 	"git.shungites.casa/tiny/rewards/internal/emotes"
+	"git.shungites.casa/tiny/rewards/internal/sounds"
 )
 
 type Options struct {
 	DB           *sql.DB
 	Authenticate fiber.Handler
 	Emotes       *emotes.Checker
+	PublicURL    string
 }
 
 type Handler struct {
@@ -76,7 +78,7 @@ func (h *Handler) Add(c fiber.Ctx) error {
 		return fiber.ErrInternalServerError
 	}
 
-	items, err := h.find(c.Context(), columnID, id)
+	items, err := h.find(c.Context(), sounds.BaseURL(c, h.opts.PublicURL), columnID, id)
 	if err != nil || len(items) == 0 {
 		log.Printf("rewards: reading added reward %s: %v", id, err)
 		return fiber.ErrInternalServerError
@@ -88,7 +90,7 @@ func (h *Handler) Add(c fiber.Ctx) error {
 func (h *Handler) List(c fiber.Ctx) error {
 	userID := c.Params("user_id")
 
-	items, err := h.find(c.Context(), columnUserID, userID)
+	items, err := h.find(c.Context(), sounds.BaseURL(c, h.opts.PublicURL), columnUserID, userID)
 	if err != nil {
 		log.Printf("rewards: listing rewards: %v", err)
 		return fiber.ErrInternalServerError

@@ -17,6 +17,7 @@ import (
 	"git.shungites.casa/tiny/rewards/internal/rewards"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
 	"git.shungites.casa/tiny/rewards/internal/storage"
+	"git.shungites.casa/tiny/rewards/internal/widget"
 )
 
 const (
@@ -100,14 +101,23 @@ func main() {
 		MaxDuration:      cfg.Files.MaxDuration,
 		Deduplicate:      cfg.Files.Deduplicate,
 		PageSize:         cfg.Sounds.PageSize,
+		PublicURL:        cfg.Server.PublicURL,
 		AnonymousUploads: cfg.Sounds.AnonymousUploads,
 		Authenticate:     accounts.OptionalAuthenticate,
 	}).Register(app)
 
+	emoteChecker := emotes.NewChecker(twitchCredentials)
+
 	rewards.NewHandler(rewards.Options{
 		DB:           db,
 		Authenticate: accounts.Authenticate,
-		Emotes:       emotes.NewChecker(twitchCredentials),
+		Emotes:       emoteChecker,
+		PublicURL:    cfg.Server.PublicURL,
+	}).Register(app)
+
+	widget.NewHandler(widget.Options{
+		DB:     db,
+		Emotes: emoteChecker,
 	}).Register(app)
 
 	log.Fatal(app.Listen(cfg.Server.Address))

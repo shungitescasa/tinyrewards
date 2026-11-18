@@ -21,6 +21,7 @@ type File struct {
 	Mime      string `json:"mime"`
 	Extension string `json:"extension"`
 	Size      int64  `json:"size"`
+	URL       string `json:"url"`
 }
 
 type Upload struct {
@@ -53,7 +54,7 @@ func (h *Handler) List(c fiber.Ctx) error {
 		page = p
 	}
 
-	items, err := h.list(c.Context(), direction, pageSize, (page-1)*pageSize)
+	items, err := h.list(c.Context(), BaseURL(c, h.opts.PublicURL), direction, pageSize, (page-1)*pageSize)
 	if err != nil {
 		log.Printf("sounds: listing uploads: %v", err)
 		return fiber.ErrInternalServerError
@@ -62,7 +63,7 @@ func (h *Handler) List(c fiber.Ctx) error {
 	return c.JSON(items)
 }
 
-func (h *Handler) list(ctx context.Context, direction string, limit, offset int64) ([]Upload, error) {
+func (h *Handler) list(ctx context.Context, baseURL, direction string, limit, offset int64) ([]Upload, error) {
 	items := []Upload{}
 
 	query := fmt.Sprintf(
@@ -105,6 +106,7 @@ func (h *Handler) list(ctx context.Context, direction string, limit, offset int6
 				Mime:      *mime,
 				Extension: *extension,
 				Size:      *size,
+				URL:       FileURL(baseURL, *fileID, *extension),
 			})
 		}
 	}

@@ -211,6 +211,7 @@ func (h *Handler) find(ctx context.Context, column, value string) ([]Reward, err
 				Mime:      *mime,
 				Extension: *extension,
 				Size:      *size,
+				URL:       sounds.FileURL(baseURL, *fileID, *extension),
 			})
 		}
 	}

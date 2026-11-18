@@ -26,6 +26,7 @@ type Options struct {
 	MaxDuration time.Duration
 	Deduplicate bool
 	PageSize    int
+	PublicURL   string
 
 	AnonymousUploads bool
 	Authenticate     fiber.Handler
@@ -42,6 +43,7 @@ func NewHandler(opts Options) *Handler {
 func (h *Handler) Register(router fiber.Router) {
 	router.Get("/sounds", h.List)
 	router.Post("/sounds/upload", h.opts.Authenticate, h.Upload)
+	router.Get(filesPath+":name", h.Download)
 }
 
 func (h *Handler) Upload(c fiber.Ctx) error {

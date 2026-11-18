@@ -1,0 +1,316 @@
+<!doctype html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>TinyRewards</title>
+	<style>
+		html,
+		body {
+			margin: 0;
+			background: transparent;
+			overflow: hidden;
+		}
+
+		#notifications {
+			position: fixed;
+			top: 8px;
+			left: 8px;
+			display: flex;
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 4px;
+			font: 14px/1.3 sans-serif;
+		}
+
+		#notifications div {
+			padding: 4px 8px;
+			border-radius: 4px;
+			background: rgba(0, 0, 0, 0.7);
+			color: #fff;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="notifications"></div>
+	<script>
+		(() => {
+			const IRC_URL = 'wss://irc-ws.chat.twitch.tv:443';
+			const PING_INTERVAL = 60000;
+			const MAX_BACKOFF = 30000;
+			const MAX_NOTIFICATIONS = 8;
+			const READY_HOLD = 3000;
+
+			const params = new URLSearchParams(location.search);
+			const emoteMode = params.get('emote_mode') === 'every' ? 'every' : 'once';
+			const delay = Math.max(0, Number(params.get('delay')) || 0);
+
+			const path = location.pathname.replace(/\/+$/, '');
+			const userId = path.slice(path.lastIndexOf('/') + 1);
+			const root = path.slice(0, path.lastIndexOf('/widget/'));
+
+			const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+			const backoff = attempt => Math.min(MAX_BACKOFF, 1000 * 2 ** attempt);
+			const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+
+			const notifications = document.getElementById('notifications');
+			let notificationsEnabled = true;
+
+			function notify(text) {
+				if (!notificationsEnabled) return;
+				const item = document.createElement('div');
+				item.textContent = text;
+				notifications.append(item);
+				while (notifications.childElementCount > MAX_NOTIFICATIONS) {
+					notifications.firstElementChild.remove();
+				}
+			}
+
+			function ready() {
+				notify('Ready');
+				notificationsEnabled = false;
+				setTimeout(() => notifications.remove(), READY_HOLD);
+			}
+
+			async function api(endpoint, what) {
+				for (let attempt = 0; ; attempt++) {
+					try {
+						const res = await fetch(root + endpoint, { cache: 'no-store' });
+						const body = await res.json();
+						if (!res.ok) throw new Error(body.message || res.statusText);
+						return body.data;
+					} catch (err) {
+						console.error(endpoint, err);
+						const wait = backoff(attempt);
+						notify('Failed to load ' + what + ', retrying in ' + wait / 1000 + 's');
+						await sleep(wait);
+					}
+				}
+			}
+
+			const players = new Map();
+			const loading = [];
+			const probe = document.createElement('audio');
+
+			function preload(audio) {
+				return new Promise(resolve => {
+					if (audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) return resolve(true);
+					audio.addEventListener('canplaythrough', () => resolve(true), { once: true });
+					audio.addEventListener('error', () => resolve(false), { once: true });
+				});
+			}
+
+			function player(files) {
+				const file = files.find(f => probe.canPlayType(f.mime)) || files[0];
+				if (!file) return null;
+				if (!players.has(file.url)) {
+					const audio = new Audio(file.url);
+					audio.preload = 'auto';
+					loading.push(preload(audio));
+					audio.load();
+					players.set(file.url, audio);
+				}
+				return players.get(file.url);
+			}
+
+			const queue = [];
+			let draining = false;
+
+			function play(audio) {
+				return new Promise(resolve => {
+					const done = () => {
+						audio.removeEventListener('ended', done);
+						audio.removeEventListener('error', done);
+						resolve();
+					};
+					audio.addEventListener('ended', done);
+					audio.addEventListener('error', done);
+					if (audio.error) audio.load();
+					audio.currentTime = 0;
+					audio.play().catch(done);
+				});
+			}
+
+			async function drain() {
+				if (draining) return;
+				draining = true;
+				while (queue.length) {
+					await play(queue.shift());
+				}
+				draining = false;
+			}
+
+			function enqueue(audio) {
+				queue.push(audio);
+				drain();
+			}
+
+			function compile(pattern) {
+				try {
+					return new RegExp(pattern, 'i');
+				} catch (err) {
+					console.error('invalid pattern', pattern, err);
+					notify('Invalid pattern: ' + pattern);
+					return null;
+				}
+			}
+
+			function parse(line) {
+				let rest = line;
+				if (rest.startsWith('@')) rest = rest.slice(rest.indexOf(' ') + 1);
+				if (rest.startsWith(':')) rest = rest.slice(rest.indexOf(' ') + 1);
+				const split = rest.indexOf(' :');
+				const head = split >= 0 ? rest.slice(0, split) : rest;
+				return {
+					command: head.split(' ')[0],
+					trailing: split >= 0 ? rest.slice(split + 2) : '',
+				};
+			}
+
+			function connect(channel, onJoin, onMessage) {
+				let attempts = 0;
+
+				const open = () => {
+					notify('Connecting to #' + channel + '...');
+					const ws = new WebSocket(IRC_URL);
+					let lastSeen = Date.now();
+					let dropped = false;
+
+					const drop = () => {
+						if (dropped) return;
+						dropped = true;
+						clearInterval(keepalive);
+						ws.close();
+						const wait = backoff(attempts++);
+						notify('Disconnected from chat, reconnecting in ' + wait / 1000 + 's');
+						setTimeout(open, wait);
+					};
+
+					const keepalive = setInterval(() => {
+						if (Date.now() - lastSeen > 2 * PING_INTERVAL) return drop();
+						if (ws.readyState === WebSocket.OPEN) ws.send('PING :tinyrewards');
+					}, PING_INTERVAL);
+
+					ws.onopen = () => {
+						ws.send('CAP REQ :twitch.tv/commands');
+						ws.send('NICK justinfan' + Math.floor(10000 + Math.random() * 90000));
+						ws.send('JOIN #' + channel);
+					};
+
+					ws.onmessage = event => {
+						lastSeen = Date.now();
+						for (const line of event.data.split('\r\n')) {
+							if (!line) continue;
+							const msg = parse(line);
+							switch (msg.command) {
+								case 'PING':
+									ws.send('PONG :' + msg.trailing);
+									break;
+								case 'RECONNECT':
+									drop();
+									return;
+								case '001':
+									attempts = 0;
+									break;
+								case 'JOIN':
+									notify('Joined #' + channel);
+									onJoin();
+									break;
+								case 'PRIVMSG':
+									onMessage(msg.trailing);
+									break;
+							}
+						}
+					};
+
+					ws.onclose = drop;
+					ws.onerror = drop;
+				};
+
+				open();
+			}
+
+			async function start() {
+				notify('Loading rewards...');
+				const rewards = await api('/rewards/' + userId, 'rewards');
+				notify('Loaded ' + plural(rewards.length, 'reward'));
+
+				const patterns = [];
+				const emoteRewards = new Map();
+				for (const reward of rewards) {
+					const audio = player(reward.upload.files);
+					if (!audio) continue;
+					if (reward.type === 'chat') {
+						const regex = compile(reward.data);
+						if (regex) patterns.push({ regex, audio });
+					} else if (reward.type === 'chat_emote') {
+						emoteRewards.set(reward.data, audio);
+					}
+				}
+
+				notify('Loading ' + plural(loading.length, 'sound') + '...');
+				const soundsLoaded = Promise.all(loading).then(results => {
+					const failed = results.filter(ok => !ok).length;
+					notify('Loaded ' + plural(results.length - failed, 'sound') + (failed ? ', ' + failed + ' failed' : ''));
+				});
+
+				if (!patterns.length && !emoteRewards.size) {
+					notify('No chat rewards found');
+					return;
+				}
+
+				notify('Loading emotes...');
+				const chat = await api('/widget/' + userId + '/chat', 'emotes');
+				const emotes = new Map();
+				for (const emote of chat.emotes) {
+					if (!emotes.has(emote.name)) emotes.set(emote.name, emote.provider + ':' + emote.id);
+				}
+				notify('Loaded ' + plural(emotes.size, 'emote'));
+
+				if (!chat.channel) {
+					notify('No Twitch channel linked');
+					return;
+				}
+
+				let lastPlayed = -Infinity;
+
+				const joined = new Promise(resolve => {
+					connect(chat.channel.toLowerCase(), resolve, raw => {
+						const action = /^\x01ACTION (.*)\x01$/s.exec(raw);
+						const text = (action ? action[1] : raw).replace(/\u{E0000}/gu, '');
+						const sounds = [];
+
+						for (const { regex, audio } of patterns) {
+							const match = regex.exec(text);
+							if (match) sounds.push({ index: match.index, audio });
+						}
+
+						for (const word of text.matchAll(/\S+/g)) {
+							const key = emotes.get(word[0]);
+							const audio = key && emoteRewards.get(key);
+							if (audio) sounds.push({ index: word.index, audio });
+						}
+
+						const now = Date.now();
+						if (!sounds.length || now - lastPlayed < delay) return;
+						lastPlayed = now;
+						sounds.sort((a, b) => a.index - b.index);
+						if (emoteMode === 'once') sounds.length = 1;
+						sounds.forEach(sound => enqueue(sound.audio));
+					});
+				});
+
+				await Promise.all([soundsLoaded, joined]);
+				ready();
+			}
+
+			start().catch(err => {
+				console.error(err);
+				notify('Error: ' + err.message);
+			});
+		})();
+	</script>
+</body>
+
+</html>

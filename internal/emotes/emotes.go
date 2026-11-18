@@ -29,7 +29,7 @@ var Providers = []string{ProviderSevenTV, ProviderBTTV, ProviderFFZ, ProviderTwi
 const (
 	requestTimeout  = 15 * time.Second
 	maxResponseSize = 16 << 20
-	channelCacheTTL = 5 * time.Minute
+	cacheTTL        = 5 * time.Minute
 )
 
 var (
@@ -43,13 +43,21 @@ type TwitchCredentials struct {
 	ClientSecret string
 }
 
-type channelKey struct {
+type Emote struct {
+	Provider string `json:"provider"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+}
+
+type fetcher func(context.Context, string) ([]Emote, error)
+
+type cacheKey struct {
 	provider     string
 	twitchUserID string
 }
 
-type channelEntry struct {
-	ids     []string
+type cacheEntry struct {
+	emotes  []Emote
 	expires time.Time
 }
 
@@ -58,14 +66,14 @@ type Checker struct {
 	twitchClientID string
 	twitchTokens   oauth2.TokenSource
 
-	mu       sync.Mutex
-	channels map[channelKey]channelEntry
+	mu    sync.Mutex
+	cache map[cacheKey]cacheEntry
 }
 
 func NewChecker(creds *TwitchCredentials) *Checker {
 	c := &Checker{
-		client:   &http.Client{Timeout: requestTimeout},
-		channels: map[channelKey]channelEntry{},
+		client: &http.Client{Timeout: requestTimeout},
+		cache:  map[cacheKey]cacheEntry{},
 	}
 	if creds != nil {
 		cfg := clientcredentials.Config{
@@ -81,54 +89,90 @@ func NewChecker(creds *TwitchCredentials) *Checker {
 	return c
 }
 
-func (c *Checker) Exists(ctx context.Context, provider, twitchUserID, emoteID string) (bool, error) {
-	var global, channel func(context.Context, string) ([]string, error)
+func (c *Checker) fetchers(provider string) (global, channel fetcher, err error) {
 	switch provider {
 	case ProviderSevenTV:
-		global, channel = c.sevenTVGlobal, c.sevenTVChannel
+		return c.sevenTVGlobal, c.sevenTVChannel, nil
 	case ProviderBTTV:
-		global, channel = c.bttvGlobal, c.bttvChannel
+		return c.bttvGlobal, c.bttvChannel, nil
 	case ProviderFFZ:
-		global, channel = c.ffzGlobal, c.ffzChannel
+		return c.ffzGlobal, c.ffzChannel, nil
 	case ProviderTwitch:
 		if c.twitchTokens == nil {
-			return false, ErrProviderDisabled
+			return nil, nil, ErrProviderDisabled
 		}
-		global, channel = c.twitchGlobal, c.twitchChannel
-	default:
-		return false, ErrUnknownProvider
+		return c.twitchGlobal, c.twitchChannel, nil
+	}
+	return nil, nil, ErrUnknownProvider
+}
+
+func (c *Checker) Exists(ctx context.Context, provider, twitchUserID, emoteID string) (bool, error) {
+	global, channel, err := c.fetchers(provider)
+	if err != nil {
+		return false, err
 	}
 
 	if twitchUserID != "" {
-		ids, err := c.channelEmotes(ctx, provider, twitchUserID, channel)
+		list, err := c.cached(ctx, provider, twitchUserID, channel)
 		if err != nil {
 			return false, fmt.Errorf("%s channel emotes: %w", provider, err)
 		}
-		if contains(ids, emoteID) {
+		if contains(list, emoteID) {
 			return true, nil
 		}
 	}
 
-	ids, err := global(ctx, "")
+	list, err := c.cached(ctx, provider, "", global)
 	if err != nil {
 		return false, fmt.Errorf("%s global emotes: %w", provider, err)
 	}
-	return contains(ids, emoteID), nil
+	return contains(list, emoteID), nil
 }
 
-func (c *Checker) channelEmotes(ctx context.Context, provider, twitchUserID string, fetch func(context.Context, string) ([]string, error)) ([]string, error) {
-	key := channelKey{provider: provider, twitchUserID: twitchUserID}
+var precedence = []string{ProviderTwitch, ProviderSevenTV, ProviderBTTV, ProviderFFZ}
+
+func (c *Checker) List(ctx context.Context, twitchUserID string) ([]Emote, error) {
+	var channelEmotes, globalEmotes []Emote
+	var errs []error
+	for _, provider := range precedence {
+		global, channel, err := c.fetchers(provider)
+		if errors.Is(err, ErrProviderDisabled) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if twitchUserID != "" {
+			list, err := c.cached(ctx, provider, twitchUserID, channel)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("%s channel emotes: %w", provider, err))
+			}
+			channelEmotes = append(channelEmotes, list...)
+		}
+
+		list, err := c.cached(ctx, provider, "", global)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s global emotes: %w", provider, err))
+		}
+		globalEmotes = append(globalEmotes, list...)
+	}
+	return append(channelEmotes, globalEmotes...), errors.Join(errs...)
+}
+
+func (c *Checker) cached(ctx context.Context, provider, twitchUserID string, fetch fetcher) ([]Emote, error) {
+	key := cacheKey{provider: provider, twitchUserID: twitchUserID}
 
 	c.mu.Lock()
-	entry, ok := c.channels[key]
+	entry, ok := c.cache[key]
 	c.mu.Unlock()
 	if ok && time.Now().Before(entry.expires) {
-		return entry.ids, nil
+		return entry.emotes, nil
 	}
 
-	ids, err := fetch(ctx, twitchUserID)
+	list, err := fetch(ctx, twitchUserID)
 	if errors.Is(err, errNotFound) {
-		ids, err = nil, nil
+		list, err = nil, nil
 	}
 	if err != nil {
 		return nil, err
@@ -136,19 +180,19 @@ func (c *Checker) channelEmotes(ctx context.Context, provider, twitchUserID stri
 
 	now := time.Now()
 	c.mu.Lock()
-	for k, v := range c.channels {
+	for k, v := range c.cache {
 		if !now.Before(v.expires) {
-			delete(c.channels, k)
+			delete(c.cache, k)
 		}
 	}
-	c.channels[key] = channelEntry{ids: ids, expires: now.Add(channelCacheTTL)}
+	c.cache[key] = cacheEntry{emotes: list, expires: now.Add(cacheTTL)}
 	c.mu.Unlock()
-	return ids, nil
+	return list, nil
 }
 
-func contains(ids []string, id string) bool {
-	for _, v := range ids {
-		if v == id {
+func contains(list []Emote, id string) bool {
+	for _, e := range list {
+		if e.ID == id {
 			return true
 		}
 	}
@@ -171,34 +215,40 @@ func (id *emoteID) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-type idObject struct {
-	ID emoteID `json:"id"`
+type emoteObject struct {
+	ID   emoteID `json:"id"`
+	Name string  `json:"name"`
+	Code string  `json:"code"`
 }
 
-func collect(lists ...[]idObject) []string {
-	var ids []string
+func collect(provider string, lists ...[]emoteObject) []Emote {
+	var out []Emote
 	for _, list := range lists {
 		for _, e := range list {
-			ids = append(ids, string(e.ID))
+			name := e.Name
+			if name == "" {
+				name = e.Code
+			}
+			out = append(out, Emote{Provider: provider, ID: string(e.ID), Name: name})
 		}
 	}
-	return ids
+	return out
 }
 
-func (c *Checker) sevenTVGlobal(ctx context.Context, _ string) ([]string, error) {
+func (c *Checker) sevenTVGlobal(ctx context.Context, _ string) ([]Emote, error) {
 	var res struct {
-		Emotes []idObject `json:"emotes"`
+		Emotes []emoteObject `json:"emotes"`
 	}
 	if err := c.get(ctx, "https://7tv.io/v3/emote-sets/global", nil, &res); err != nil {
 		return nil, err
 	}
-	return collect(res.Emotes), nil
+	return collect(ProviderSevenTV, res.Emotes), nil
 }
 
-func (c *Checker) sevenTVChannel(ctx context.Context, twitchUserID string) ([]string, error) {
+func (c *Checker) sevenTVChannel(ctx context.Context, twitchUserID string) ([]Emote, error) {
 	var res struct {
 		EmoteSet *struct {
-			Emotes []idObject `json:"emotes"`
+			Emotes []emoteObject `json:"emotes"`
 		} `json:"emote_set"`
 	}
 	if err := c.get(ctx, "https://7tv.io/v3/users/twitch/"+url.PathEscape(twitchUserID), nil, &res); err != nil {
@@ -207,33 +257,33 @@ func (c *Checker) sevenTVChannel(ctx context.Context, twitchUserID string) ([]st
 	if res.EmoteSet == nil {
 		return nil, nil
 	}
-	return collect(res.EmoteSet.Emotes), nil
+	return collect(ProviderSevenTV, res.EmoteSet.Emotes), nil
 }
 
-func (c *Checker) bttvGlobal(ctx context.Context, _ string) ([]string, error) {
-	var res []idObject
+func (c *Checker) bttvGlobal(ctx context.Context, _ string) ([]Emote, error) {
+	var res []emoteObject
 	if err := c.get(ctx, "https://api.betterttv.net/3/cached/emotes/global", nil, &res); err != nil {
 		return nil, err
 	}
-	return collect(res), nil
+	return collect(ProviderBTTV, res), nil
 }
 
-func (c *Checker) bttvChannel(ctx context.Context, twitchUserID string) ([]string, error) {
+func (c *Checker) bttvChannel(ctx context.Context, twitchUserID string) ([]Emote, error) {
 	var res struct {
-		ChannelEmotes []idObject `json:"channelEmotes"`
-		SharedEmotes  []idObject `json:"sharedEmotes"`
+		ChannelEmotes []emoteObject `json:"channelEmotes"`
+		SharedEmotes  []emoteObject `json:"sharedEmotes"`
 	}
 	if err := c.get(ctx, "https://api.betterttv.net/3/cached/users/twitch/"+url.PathEscape(twitchUserID), nil, &res); err != nil {
 		return nil, err
 	}
-	return collect(res.ChannelEmotes, res.SharedEmotes), nil
+	return collect(ProviderBTTV, res.ChannelEmotes, res.SharedEmotes), nil
 }
 
 type ffzSet struct {
-	Emoticons []idObject `json:"emoticons"`
+	Emoticons []emoteObject `json:"emoticons"`
 }
 
-func (c *Checker) ffzGlobal(ctx context.Context, _ string) ([]string, error) {
+func (c *Checker) ffzGlobal(ctx context.Context, _ string) ([]Emote, error) {
 	var res struct {
 		DefaultSets []emoteID         `json:"default_sets"`
 		Sets        map[string]ffzSet `json:"sets"`
@@ -241,40 +291,40 @@ func (c *Checker) ffzGlobal(ctx context.Context, _ string) ([]string, error) {
 	if err := c.get(ctx, "https://api.frankerfacez.com/v1/set/global", nil, &res); err != nil {
 		return nil, err
 	}
-	var ids []string
+	var list []Emote
 	for _, setID := range res.DefaultSets {
-		ids = append(ids, collect(res.Sets[string(setID)].Emoticons)...)
+		list = append(list, collect(ProviderFFZ, res.Sets[string(setID)].Emoticons)...)
 	}
-	return ids, nil
+	return list, nil
 }
 
-func (c *Checker) ffzChannel(ctx context.Context, twitchUserID string) ([]string, error) {
+func (c *Checker) ffzChannel(ctx context.Context, twitchUserID string) ([]Emote, error) {
 	var res struct {
 		Sets map[string]ffzSet `json:"sets"`
 	}
 	if err := c.get(ctx, "https://api.frankerfacez.com/v1/room/id/"+url.PathEscape(twitchUserID), nil, &res); err != nil {
 		return nil, err
 	}
-	var ids []string
+	var list []Emote
 	for _, set := range res.Sets {
-		ids = append(ids, collect(set.Emoticons)...)
+		list = append(list, collect(ProviderFFZ, set.Emoticons)...)
 	}
-	return ids, nil
+	return list, nil
 }
 
 type helixEmotes struct {
-	Data []idObject `json:"data"`
+	Data []emoteObject `json:"data"`
 }
 
-func (c *Checker) twitchGlobal(ctx context.Context, _ string) ([]string, error) {
+func (c *Checker) twitchGlobal(ctx context.Context, _ string) ([]Emote, error) {
 	return c.helix(ctx, "https://api.twitch.tv/helix/chat/emotes/global")
 }
 
-func (c *Checker) twitchChannel(ctx context.Context, twitchUserID string) ([]string, error) {
+func (c *Checker) twitchChannel(ctx context.Context, twitchUserID string) ([]Emote, error) {
 	return c.helix(ctx, "https://api.twitch.tv/helix/chat/emotes?broadcaster_id="+url.QueryEscape(twitchUserID))
 }
 
-func (c *Checker) helix(ctx context.Context, endpoint string) ([]string, error) {
+func (c *Checker) helix(ctx context.Context, endpoint string) ([]Emote, error) {
 	token, err := c.twitchTokens.Token()
 	if err != nil {
 		return nil, fmt.Errorf("twitch app token: %w", err)
@@ -287,7 +337,7 @@ func (c *Checker) helix(ctx context.Context, endpoint string) ([]string, error) 
 	if err := c.get(ctx, endpoint, header, &res); err != nil {
 		return nil, err
 	}
-	return collect(res.Data), nil
+	return collect(ProviderTwitch, res.Data), nil
 }
 
 func (c *Checker) get(ctx context.Context, endpoint string, header http.Header, out any) error {
