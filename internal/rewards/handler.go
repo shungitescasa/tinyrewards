@@ -33,6 +33,19 @@ func NewHandler(opts Options) *Handler {
 func (h *Handler) Register(router fiber.Router) {
 	router.Post("/rewards/add", h.opts.Authenticate, h.Add)
 	router.Get("/rewards/:user_id", h.List)
+	router.Delete("/rewards/:id", h.opts.Authenticate, h.Delete)
+}
+
+func (h *Handler) Delete(c fiber.Ctx) error {
+	err := h.delete(c.Context(), c.Params("id"), account.UserID(c))
+	switch {
+	case errors.Is(err, ErrRewardNotFound):
+		return fiber.NewError(fiber.StatusNotFound, err.Error())
+	case err != nil:
+		log.Printf("rewards: deleting reward: %v", err)
+		return fiber.ErrInternalServerError
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *Handler) Add(c fiber.Ctx) error {

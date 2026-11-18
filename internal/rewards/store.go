@@ -42,6 +42,7 @@ var (
 	ErrEmoteNotFound  = errors.New("emote is not available in the user's channel or globally")
 	ErrUploadNotFound = errors.New("upload not found")
 	ErrDuplicate      = errors.New("reward with this type and data already exists")
+	ErrRewardNotFound = errors.New("reward not found")
 )
 
 type Reward struct {
@@ -165,7 +166,22 @@ func (h *Handler) insert(ctx context.Context, id, userID, rewardType, data, uplo
 	return nil
 }
 
-func (h *Handler) find(ctx context.Context, column, value string) ([]Reward, error) {
+func (h *Handler) delete(ctx context.Context, id, userID string) error {
+	res, err := h.opts.DB.ExecContext(ctx, `DELETE FROM rewards WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrRewardNotFound
+	}
+	return nil
+}
+
+func (h *Handler) find(ctx context.Context, baseURL, column, value string) ([]Reward, error) {
 	items := []Reward{}
 
 	rows, err := h.opts.DB.QueryContext(ctx,
