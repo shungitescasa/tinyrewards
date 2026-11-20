@@ -1,0 +1,63 @@
+{{define "layout" -}}
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{block "title" .}}{{end}}TinyRewards</title>
+	<link rel="stylesheet" href="{{asset `style.css`}}">
+	{{- block "head" .}}{{end}}
+</head>
+
+<body>
+	<header>
+		<nav>
+			<ul>
+				<li><a href="/" class="brand">TinyRewards</a></li>
+				<li><a href="/sounds">sounds</a></li>
+				<li><a href="/sounds/upload">upload</a></li>
+				{{- if .Viewer}}
+				<li><a href="/rewards">rewards</a></li>
+				{{- end}}
+			</ul>
+			{{- with .Viewer}}
+			<div class="dropdown">
+				<a href="/users/{{.ID}}" class="button">{{.Username}}</a>
+				<div class="menu">
+					<a href="/users/{{.ID}}">profile</a>
+					<a href="/rewards">rewards</a>
+					<a href="/account">account settings</a>
+					<form action="/account/logout" method="post">
+						<button type="submit">sign out</button>
+					</form>
+				</div>
+			</div>
+			{{- else}}
+			<a href="/account/login" class="button">log in</a>
+			{{- end}}
+		</nav>
+	</header>
+
+	<main>
+		{{- if or .Messages .Error}}
+		<div class="notices">
+			{{- range .Messages}}
+			<p class="notice {{.Key}}">{{.Value}}</p>
+			{{- end}}
+			{{- with .Error}}
+			<p class="notice error">{{.}}</p>
+			{{- end}}
+		</div>
+		{{- end}}
+		{{template "main" .}}
+	</main>
+
+	<footer>
+		<span>TinyRewards</span>
+		<a href="https://git.shungites.casa/tiny/rewards">source code</a>
+	</footer>
+</body>
+
+</html>
+{{- end}}

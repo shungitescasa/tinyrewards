@@ -34,7 +34,7 @@ const (
 
 var (
 	ErrUnknownProvider  = errors.New("unknown emote provider")
-	ErrProviderDisabled = errors.New("emote provider is not configured")
+	ErrProviderDisabled = errors.New("emote provider is not enabled")
 	errNotFound         = errors.New("not found")
 )
 
@@ -62,6 +62,7 @@ type cacheEntry struct {
 }
 
 type Checker struct {
+	enabled        map[string]bool
 	client         *http.Client
 	twitchClientID string
 	twitchTokens   oauth2.TokenSource
@@ -70,12 +71,25 @@ type Checker struct {
 	cache map[cacheKey]cacheEntry
 }
 
-func NewChecker(creds *TwitchCredentials) *Checker {
-	c := &Checker{
-		client: &http.Client{Timeout: requestTimeout},
-		cache:  map[cacheKey]cacheEntry{},
+func IsProvider(name string) bool {
+	for _, p := range Providers {
+		if p == name {
+			return true
+		}
 	}
-	if creds != nil {
+	return false
+}
+
+func NewChecker(providers []string, creds *TwitchCredentials) *Checker {
+	c := &Checker{
+		enabled: map[string]bool{},
+		client:  &http.Client{Timeout: requestTimeout},
+		cache:   map[cacheKey]cacheEntry{},
+	}
+	for _, p := range providers {
+		c.enabled[p] = true
+	}
+	if creds != nil && c.enabled[ProviderTwitch] {
 		cfg := clientcredentials.Config{
 			ClientID:     creds.ClientID,
 			ClientSecret: creds.ClientSecret,
@@ -89,7 +103,32 @@ func NewChecker(creds *TwitchCredentials) *Checker {
 	return c
 }
 
+func ImageURL(provider, id string) string {
+	id = url.PathEscape(id)
+	switch provider {
+	case ProviderSevenTV:
+		return "https://cdn.7tv.app/emote/" + id + "/2x.webp"
+	case ProviderBTTV:
+		return "https://cdn.betterttv.net/emote/" + id + "/2x"
+	case ProviderFFZ:
+		return "https://cdn.frankerfacez.com/emote/" + id + "/2"
+	case ProviderTwitch:
+		return "https://static-cdn.jtvnw.net/emoticons/v2/" + id + "/default/dark/2.0"
+	}
+	return ""
+}
+
+func (c *Checker) Enabled(provider string) bool {
+	return c.enabled[provider] && (provider != ProviderTwitch || c.twitchTokens != nil)
+}
+
 func (c *Checker) fetchers(provider string) (global, channel fetcher, err error) {
+	if !IsProvider(provider) {
+		return nil, nil, ErrUnknownProvider
+	}
+	if !c.Enabled(provider) {
+		return nil, nil, ErrProviderDisabled
+	}
 	switch provider {
 	case ProviderSevenTV:
 		return c.sevenTVGlobal, c.sevenTVChannel, nil
@@ -98,9 +137,6 @@ func (c *Checker) fetchers(provider string) (global, channel fetcher, err error)
 	case ProviderFFZ:
 		return c.ffzGlobal, c.ffzChannel, nil
 	case ProviderTwitch:
-		if c.twitchTokens == nil {
-			return nil, nil, ErrProviderDisabled
-		}
 		return c.twitchGlobal, c.twitchChannel, nil
 	}
 	return nil, nil, ErrUnknownProvider

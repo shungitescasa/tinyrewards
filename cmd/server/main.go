@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"flag"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -17,6 +18,7 @@ import (
 	"git.shungites.casa/tiny/rewards/internal/rewards"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
 	"git.shungites.casa/tiny/rewards/internal/storage"
+	"git.shungites.casa/tiny/rewards/internal/web"
 	"git.shungites.casa/tiny/rewards/internal/widget"
 )
 
@@ -24,6 +26,7 @@ const (
 	multipartOverhead = 1 << 20
 	dbStartupTimeout  = 30 * time.Second
 	s3StartupTimeout  = 30 * time.Second
+	apiPrefix         = "/api"
 )
 
 func main() {
@@ -50,16 +53,6 @@ func main() {
 	}
 	defer db.Close()
 
-	app := fiber.New(fiber.Config{
-		BodyLimit: int(cfg.Files.MaxSize + multipartOverhead),
-	})
-
-	app.Use(middleware.JSON())
-
-	app.Get("/", func(c fiber.Ctx) error {
-		return c.SendString("Hello, World!")
-	})
-
 	store, err := openStorage(cfg)
 	if err != nil {
 		log.Fatalf("storage: %v", err)
@@ -78,8 +71,9 @@ func main() {
 			RedirectURL:  cfg.Twitch.RedirectURL,
 		}
 	} else {
-		log.Print("twitch: client_id is not set, /account/login/twitch and twitch emote rewards are disabled")
+		log.Print("twitch: client_id is not set, twitch login and twitch emote rewards are disabled")
 	}
+	log.Printf("emotes: enabled providers: %s", strings.Join(cfg.Emotes.Providers, ", "))
 	secret := []byte(cfg.Auth.Secret)
 	if len(secret) == 0 {
 		secret = make([]byte, config.MinSecretLength)
@@ -92,9 +86,8 @@ func main() {
 		TokenSecret: secret,
 		TokenTTL:    cfg.Auth.TokenTTL,
 	})
-	accounts.Register(app)
 
-	sounds.NewHandler(sounds.Options{
+	soundHandler := sounds.NewHandler(sounds.Options{
 		DB:               db,
 		Storage:          store,
 		MaxSize:          cfg.Files.MaxSize,
@@ -104,21 +97,49 @@ func main() {
 		PublicURL:        cfg.Server.PublicURL,
 		AnonymousUploads: cfg.Sounds.AnonymousUploads,
 		Authenticate:     accounts.OptionalAuthenticate,
-	}).Register(app)
+	})
 
-	emoteChecker := emotes.NewChecker(twitchCredentials)
+	emoteChecker := emotes.NewChecker(cfg.Emotes.Providers, twitchCredentials)
 
-	rewards.NewHandler(rewards.Options{
+	rewardHandler := rewards.NewHandler(rewards.Options{
 		DB:           db,
 		Authenticate: accounts.Authenticate,
 		Emotes:       emoteChecker,
 		PublicURL:    cfg.Server.PublicURL,
-	}).Register(app)
+	})
 
-	widget.NewHandler(widget.Options{
+	widgetHandler := widget.NewHandler(widget.Options{
 		DB:     db,
 		Emotes: emoteChecker,
-	}).Register(app)
+	})
+
+	pages := web.NewHandler(web.Options{
+		Accounts:         accounts,
+		Sounds:           soundHandler,
+		Rewards:          rewardHandler,
+		Emotes:           emoteChecker,
+		PublicURL:        cfg.Server.PublicURL,
+		MaxSize:          cfg.Files.MaxSize,
+		MaxDuration:      cfg.Files.MaxDuration,
+		AnonymousUploads: cfg.Sounds.AnonymousUploads,
+	})
+
+	app := fiber.New(fiber.Config{
+		BodyLimit: int(cfg.Files.MaxSize + multipartOverhead),
+		ErrorHandler: func(c fiber.Ctx, err error) error {
+			if p := c.Path(); p == apiPrefix || strings.HasPrefix(p, apiPrefix+"/") {
+				return middleware.WriteError(c, err)
+			}
+			return pages.Error(c, err)
+		},
+	})
+
+	api := app.Group(apiPrefix, middleware.JSON())
+	accounts.Register(api)
+	soundHandler.Register(app, api)
+	rewardHandler.Register(api)
+	widgetHandler.Register(app, api)
+	pages.Register(app)
 
 	log.Fatal(app.Listen(cfg.Server.Address))
 }

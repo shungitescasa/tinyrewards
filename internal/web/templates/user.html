@@ -1,0 +1,54 @@
+{{define "title"}}{{.User.Username}} · {{end}}
+
+{{define "head"}}
+<script src="{{asset `tabs.js`}}" defer></script>
+{{- end}}
+
+{{define "main"}}
+<aside>
+	<section class="box">
+		<div class="tab">{{.User.Username}}</div>
+		<div class="content">
+			<dl>
+				<dt>Joined</dt>
+				<dd>{{date .User.JoinedAt}}</dd>
+				<dt>Rewards</dt>
+				<dd>{{len .Rewards}}</dd>
+			</dl>
+			{{- if .Twitch}}
+			<a href="https://twitch.tv/{{.User.Username}}">twitch.tv/{{.User.Username}}</a>
+			{{- end}}
+		</div>
+	</section>
+	{{- if .Self}}
+	<a href="/rewards" class="button">manage rewards</a>
+	{{- end}}
+</aside>
+
+<article data-tabs>
+	<section class="box" id="rewards">
+		<div class="tab">Rewards</div>
+		<div class="content">
+			{{- if .Rewards}}
+			{{template "rewards" .}}
+			{{- else}}
+			<p>No rewards yet.</p>
+			{{- end}}
+		</div>
+	</section>
+
+	<section class="box" id="sounds">
+		<div class="tab">Sounds</div>
+		<div class="content">
+			{{- if .Sounds}}
+			<div class="sounds">
+				{{- range .Sounds}}{{template "sound" .}}{{end}}
+			</div>
+			{{template "pagination" .Pager}}
+			{{- else}}
+			<p>No uploaded sounds.</p>
+			{{- end}}
+		</div>
+	</section>
+</article>
+{{end}}

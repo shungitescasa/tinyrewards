@@ -1,0 +1,73 @@
+{{define "title"}}New reward · {{end}}
+
+{{define "main"}}
+<article class="narrow">
+	<h1>New reward</h1>
+
+	<section class="box">
+		<div class="tab">Sound</div>
+		<div class="content">
+			{{- with .Upload}}
+			<div class="track">
+				<div class="info">
+					<b>{{.Code}}</b>
+					<a href="/rewards/new?type={{$.Type}}" class="button">change</a>
+				</div>
+				{{template "audio" .}}
+			</div>
+			{{- else}}
+			{{- if .Uploads}}
+			<p class="hint">Your recent uploads</p>
+			<ul class="picker">
+				{{- range .Uploads}}
+				<li class="track">
+					<div class="info">
+						<b>{{.Code}}</b>
+						<a href="/rewards/new?type={{$.Type}}&amp;upload={{.ID}}" class="button">select</a>
+					</div>
+					{{template "audio" .}}
+				</li>
+				{{- end}}
+			</ul>
+			{{- else}}
+			<p>You haven't uploaded any sounds yet.</p>
+			{{- end}}
+			<p class="hint"><a href="/sounds/upload">Upload a new one</a> or pick any from <a href="/sounds">all
+					sounds</a>.</p>
+			{{- end}}
+		</div>
+	</section>
+
+	<form action="/rewards/new" method="post" class="box">
+		<nav class="tabs">
+			<a href="/rewards/new?type=chat{{with .Upload}}&amp;upload={{.ID}}{{end}}" {{- if eq .Type "chat" }}
+				class="active" {{- end}}>Chat message</a>
+			<a href="/rewards/new?type=chat_emote{{with .Upload}}&amp;upload={{.ID}}{{end}}" {{- if eq
+				.Type "chat_emote" }} class="active" {{- end}}>Emote</a>
+		</nav>
+		<div class="content form">
+			<input type="hidden" name="type" value="{{.Type}}">
+			<input type="hidden" name="upload_id" value="{{with .Upload}}{{.ID}}{{end}}">
+
+			{{- if eq .Type "chat_emote"}}
+			<label for="data">Emote</label>
+			<input type="text" id="data" name="data" value="{{.Data}}" list="emotes" placeholder="emote name"
+				autocomplete="off" required>
+			<datalist id="emotes">
+				{{- range .Emotes}}
+				<option value="{{.Name}}">{{.Provider}}</option>
+				{{- end}}
+			</datalist>
+			<p class="hint">Any 7TV, BTTV, FFZ or Twitch emote from your channel or the global sets.</p>
+			{{- else}}
+			<label for="data">Pattern</label>
+			<input type="text" id="data" name="data" value="{{.Data}}" placeholder="^!hello\b" autocomplete="off"
+				required>
+			<p class="hint">A case-insensitive JavaScript regular expression, tested against every chat message.</p>
+			{{- end}}
+
+			<button type="submit" class="green" {{- if not .Upload}} disabled{{end}}>Create</button>
+		</div>
+	</form>
+</article>
+{{end}}

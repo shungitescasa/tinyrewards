@@ -95,14 +95,7 @@ func parseEmote(data string) (string, string, error) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	id = strings.TrimSpace(id)
 
-	known := false
-	for _, p := range emotes.Providers {
-		if provider == p {
-			known = true
-			break
-		}
-	}
-	if !known || id == "" || len(id) > maxEmoteIDLength {
+	if !emotes.IsProvider(provider) || id == "" || len(id) > maxEmoteIDLength {
 		return "", "", ErrInvalidEmote
 	}
 	for _, r := range id {
@@ -186,10 +179,11 @@ func (h *Handler) find(ctx context.Context, baseURL, column, value string) ([]Re
 
 	rows, err := h.opts.DB.QueryContext(ctx,
 		`SELECT r.id, r.user_id, r.type, r.data, r.created_at,
-		        u.id, u.code, u.user_id, u.uploaded_at,
+		        u.id, u.code, u.user_id, usr.username, u.uploaded_at,
 		        f.id, f.mime, f.extension, f.size
 		 FROM rewards r
 		 JOIN uploads u ON u.id = r.upload_id
+		 LEFT JOIN users usr ON usr.id = u.user_id
 		 LEFT JOIN upload_files uf ON uf.upload_id = u.id
 		 LEFT JOIN files f ON f.id = uf.file_id
 		 WHERE `+column+` = ?
@@ -211,7 +205,7 @@ func (h *Handler) find(ctx context.Context, baseURL, column, value string) ([]Re
 		)
 		if err := rows.Scan(
 			&r.ID, &r.UserID, &r.Type, &r.Data, &r.CreatedAt,
-			&r.Upload.ID, &r.Upload.Code, &r.Upload.UserID, &r.Upload.UploadedAt,
+			&r.Upload.ID, &r.Upload.Code, &r.Upload.UserID, &r.Upload.Username, &r.Upload.UploadedAt,
 			&fileID, &mime, &extension, &size,
 		); err != nil {
 			return nil, err

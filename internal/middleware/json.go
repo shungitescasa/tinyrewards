@@ -17,7 +17,7 @@ type envelope struct {
 func JSON() fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := c.Next(); err != nil {
-			return writeError(c, err)
+			return WriteError(c, err)
 		}
 
 		res := c.Response()
@@ -31,14 +31,14 @@ func JSON() fiber.Handler {
 		}
 		out, err := json.Marshal(envelope{Data: data})
 		if err != nil {
-			return writeError(c, err)
+			return WriteError(c, err)
 		}
 		res.SetBody(out)
 		return nil
 	}
 }
 
-func writeError(c fiber.Ctx, err error) error {
+func WriteError(c fiber.Ctx, err error) error {
 	code := fiber.StatusInternalServerError
 	message := fiber.ErrInternalServerError.Message
 

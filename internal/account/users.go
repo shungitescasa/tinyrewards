@@ -56,13 +56,40 @@ func (h *Handler) findByConnection(ctx context.Context, platform, aliasID string
 	return u, err
 }
 
-func (h *Handler) findByID(ctx context.Context, id string) (User, error) {
+func (h *Handler) FindByID(ctx context.Context, id string) (User, error) {
 	var u User
 	err := h.db.QueryRowContext(ctx,
 		`SELECT id, username, joined_at FROM users WHERE id = ?`,
 		id,
 	).Scan(&u.ID, &u.Username, &u.JoinedAt)
 	return u, err
+}
+
+type Connection struct {
+	Platform    string    `json:"platform"`
+	AliasID     string    `json:"alias_id"`
+	ConnectedAt time.Time `json:"connected_at"`
+}
+
+func (h *Handler) Connections(ctx context.Context, userID string) ([]Connection, error) {
+	rows, err := h.db.QueryContext(ctx,
+		`SELECT platform, alias_id, connected_at FROM connections WHERE user_id = ? ORDER BY connected_at`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Connection
+	for rows.Next() {
+		var conn Connection
+		if err := rows.Scan(&conn.Platform, &conn.AliasID, &conn.ConnectedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, conn)
+	}
+	return list, rows.Err()
 }
 
 func (h *Handler) register(ctx context.Context, platform, aliasID, username string) (User, error) {

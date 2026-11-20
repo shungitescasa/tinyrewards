@@ -1,0 +1,76 @@
+{{define "audio" -}}
+<audio controls preload="none">
+	{{- range .Files}}
+	<source src="{{.URL}}" type="{{.Mime}}">{{end -}}
+</audio>
+{{- end}}
+
+{{define "sound"}}
+<div class="sound box">
+	<div class="tab" title="{{.Code}}">{{.Code}}</div>
+	<div class="content">
+		{{template "audio" .}}
+		<p class="meta">
+			{{- with .Username}}<a href="/users/{{$.UserID}}">{{.}}</a>{{else}}anonymous{{end}} · {{date .UploadedAt -}}
+		</p>
+		<a href="/rewards/new?upload={{.ID}}">use as reward</a>
+	</div>
+</div>
+{{- end}}
+
+{{define "rewards"}}
+<div class="scroll">
+	<table>
+		<thead>
+			<tr>
+				<th>Trigger</th>
+				<th>Sound</th>
+				<th>Added</th>
+				{{- if .Owner}}
+				<th></th>
+				{{- end}}
+			</tr>
+		</thead>
+		<tbody>
+			{{- range .Rewards}}
+			<tr>
+				<td>
+					{{- if eq .Type "chat_emote"}}
+					{{- $name := or (index $.EmoteNames .Data) .Data}}
+					<img src="{{emote .Data}}" alt="{{$name}}" title="{{$name}}" class="emote"> {{$name}}
+					{{- else}}
+					<code>{{.Data}}</code>
+					{{- end}}
+				</td>
+				<td>
+					{{.Upload.Code}}
+					{{template "audio" .Upload}}
+				</td>
+				<td>{{date .CreatedAt}}</td>
+				{{- if $.Owner}}
+				<td>
+					<form action="/rewards/{{.ID}}/delete" method="post">
+						<button type="submit" class="red">delete</button>
+					</form>
+				</td>
+				{{- end}}
+			</tr>
+			{{- end}}
+		</tbody>
+	</table>
+</div>
+{{- end}}
+
+{{define "pagination"}}
+{{- if or .Prev .Next}}
+<nav class="pagination">
+	{{- with .Prev}}
+	<a href="{{.}}">&lt; prev</a>
+	{{- end}}
+	<span>page {{.Page}}</span>
+	{{- with .Next}}
+	<a href="{{.}}">next &gt;</a>
+	{{- end}}
+</nav>
+{{- end}}
+{{- end}}

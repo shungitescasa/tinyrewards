@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"io/fs"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"gopkg.in/ini.v1"
+
+	"git.shungites.casa/tiny/rewards/internal/emotes"
 )
 
 const DefaultPath = "tinyrewards.ini"
@@ -64,6 +67,10 @@ func (t Twitch) Enabled() bool {
 	return t.ClientID != ""
 }
 
+type Emotes struct {
+	Providers []string
+}
+
 type Auth struct {
 	Secret   string
 	TokenTTL time.Duration
@@ -76,6 +83,7 @@ type Config struct {
 	Sounds   Sounds
 	S3       S3
 	Twitch   Twitch
+	Emotes   Emotes
 	Auth     Auth
 }
 
@@ -101,6 +109,9 @@ func Default() Config {
 		S3: S3{
 			Endpoint: "s3.amazonaws.com",
 			Secure:   true,
+		},
+		Emotes: Emotes{
+			Providers: []string{emotes.ProviderSevenTV, emotes.ProviderBTTV, emotes.ProviderFFZ},
 		},
 		Auth: Auth{
 			TokenTTL: 7 * 24 * time.Hour,
@@ -198,6 +209,13 @@ func Load(path string, required bool) (Config, error) {
 	cfg.Twitch.ClientSecret = twitch.Key("client_secret").MustString(cfg.Twitch.ClientSecret)
 	cfg.Twitch.RedirectURL = twitch.Key("redirect_url").MustString(cfg.Twitch.RedirectURL)
 
+	emoteSection := file.Section("emotes")
+	if emoteSection.HasKey("providers") {
+		cfg.Emotes.Providers = parseList(emoteSection.Key("providers").String())
+	} else if cfg.Twitch.Enabled() {
+		cfg.Emotes.Providers = append(cfg.Emotes.Providers, emotes.ProviderTwitch)
+	}
+
 	auth := file.Section("auth")
 	cfg.Auth.Secret = auth.Key("secret").MustString(cfg.Auth.Secret)
 	if key := auth.Key("token_ttl"); key.String() != "" {
@@ -246,6 +264,15 @@ func (c Config) validate() error {
 		return err
 	}
 
+	for _, p := range c.Emotes.Providers {
+		if !emotes.IsProvider(p) {
+			return fmt.Errorf("emotes.providers: unknown provider %q, must be one of: %s", p, strings.Join(emotes.Providers, ", "))
+		}
+		if p == emotes.ProviderTwitch && !c.Twitch.Enabled() {
+			return errors.New("emotes.providers: twitch requires the [twitch] section to be configured")
+		}
+	}
+
 	switch c.Files.Storage {
 	case StorageLocal:
 		if c.Files.Directory == "" {
@@ -286,6 +313,17 @@ func (t Twitch) validate() error {
 		return fmt.Errorf("twitch.redirect_url must be an absolute http(s) URL, got %q", t.RedirectURL)
 	}
 	return nil
+}
+
+func parseList(s string) []string {
+	out := []string{}
+	for _, item := range strings.Split(s, ",") {
+		item = strings.ToLower(strings.TrimSpace(item))
+		if item != "" && !slices.Contains(out, item) {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func parseEndpoint(s string) (string, bool, error) {

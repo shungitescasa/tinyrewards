@@ -1,0 +1,31 @@
+{{define "title"}}{{end}}
+
+{{define "main"}}
+<section class="promo">
+	<h1>TinyRewards</h1>
+	<p>Sound alerts for your Twitch chat.</p>
+	<div class="actions">
+		{{- if .Viewer}}
+		<a href="/rewards" class="button">your rewards</a>
+		{{- else}}
+		<a href="/account/login" class="button">get started</a>
+		{{- end}}
+		<a href="/sounds" class="button outline">browse sounds</a>
+	</div>
+</section>
+
+<section class="features">
+	<div class="box">
+		<h2>Upload</h2>
+		<p>Share short ogg, wav or mp3 clips, up to {{.MaxDuration}} each.</p>
+	</div>
+	<div class="box">
+		<h2>Reward</h2>
+		<p>Bind a sound to a chat message pattern or to a 7TV, BTTV, FFZ or Twitch emote.</p>
+	</div>
+	<div class="box">
+		<h2>Play</h2>
+		<p>Add your widget link as a browser source in OBS. It listens to chat, no bot required.</p>
+	</div>
+</section>
+{{end}}

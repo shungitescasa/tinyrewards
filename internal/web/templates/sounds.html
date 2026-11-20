@@ -1,0 +1,22 @@
+{{define "title"}}Sounds · {{end}}
+
+{{define "main"}}
+<article>
+	<div class="toolbar">
+		<nav class="tabs">
+			<a href="/sounds?sort=recent" {{- if eq .Sort "recent" }} class="active" {{- end}}>recent</a>
+			<a href="/sounds?sort=oldest" {{- if eq .Sort "oldest" }} class="active" {{- end}}>oldest</a>
+		</nav>
+		<a href="/sounds/upload" class="button green">upload</a>
+	</div>
+
+	{{- if .Sounds}}
+	<div class="sounds">
+		{{- range .Sounds}}{{template "sound" .}}{{end}}
+	</div>
+	{{template "pagination" .Pager}}
+	{{- else}}
+	<p>No sounds here yet.</p>
+	{{- end}}
+</article>
+{{end}}

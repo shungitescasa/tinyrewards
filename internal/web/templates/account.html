@@ -1,0 +1,53 @@
+{{define "title"}}Account settings · {{end}}
+
+{{define "main"}}
+<article class="narrow">
+	<h1>Account settings</h1>
+
+	<section class="box">
+		<div class="tab">Profile</div>
+		<div class="content">
+			<dl>
+				<dt>Username</dt>
+				<dd><a href="/users/{{.Viewer.ID}}">{{.Viewer.Username}}</a></dd>
+				<dt>Joined</dt>
+				<dd>{{date .Viewer.JoinedAt}}</dd>
+				<dt>ID</dt>
+				<dd><code>{{.Viewer.ID}}</code></dd>
+			</dl>
+		</div>
+	</section>
+
+	<section class="box">
+		<div class="tab">Connections</div>
+		<div class="content">
+			{{- if .Connections}}
+			<dl>
+				{{- range .Connections}}
+				<dt>{{if eq .Platform "twitch"}}Twitch{{else}}{{.Platform}}{{end}}</dt>
+				<dd><code>{{.AliasID}}</code>, connected {{date .ConnectedAt}}</dd>
+				{{- end}}
+			</dl>
+			{{- else}}
+			<p>No connections.</p>
+			{{- end}}
+		</div>
+	</section>
+
+	<section class="box">
+		<div class="tab">API</div>
+		<div class="content">
+			<details>
+				<summary>Access token</summary>
+				<input type="text" value="{{.Token}}" aria-label="access token" readonly>
+			</details>
+			<p class="hint">Send it as <code>Authorization: Bearer &lt;token&gt;</code> to <code>/api</code> endpoints.
+				Keep it secret.</p>
+		</div>
+	</section>
+
+	<form action="/account/logout" method="post">
+		<button type="submit" class="red">Sign out</button>
+	</form>
+</article>
+{{end}}

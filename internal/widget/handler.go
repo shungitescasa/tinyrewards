@@ -30,9 +30,9 @@ func NewHandler(opts Options) *Handler {
 	return &Handler{opts: opts}
 }
 
-func (h *Handler) Register(router fiber.Router) {
-	router.Get("/widget/:user_id", h.Page)
-	router.Get("/widget/:user_id/chat", h.Chat)
+func (h *Handler) Register(app, api fiber.Router) {
+	app.Get("/widget/:user_id", h.Page)
+	api.Get("/widget/:user_id/chat", h.Chat)
 }
 
 type channel struct {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"os"
 	"time"
 
@@ -40,43 +41,63 @@ func NewHandler(opts Options) *Handler {
 	return &Handler{opts: opts}
 }
 
-func (h *Handler) Register(router fiber.Router) {
-	router.Get("/sounds", h.List)
-	router.Post("/sounds/upload", h.opts.Authenticate, h.Upload)
-	router.Get(filesPath+":name", h.Download)
+func (h *Handler) Register(app, api fiber.Router) {
+	api.Get("/sounds", h.List)
+	api.Post("/sounds/upload", h.opts.Authenticate, h.Upload)
+	app.Get(filesPath+":name", h.Download)
 }
 
 func (h *Handler) Upload(c fiber.Ctx) error {
-	userID := account.UserID(c)
-	if userID == "" && !h.opts.AnonymousUploads {
-		return fiber.NewError(fiber.StatusUnauthorized, "authentication is required to upload sounds")
-	}
-
-	code, err := uploadCode(c.FormValue("code"))
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
-	}
-
-	fh, err := c.FormFile("sound")
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, `missing "sound" file field`)
-	}
-	if fh.Size == 0 {
-		return fiber.NewError(fiber.StatusBadRequest, "sound file is empty")
-	}
-	if fh.Size > h.opts.MaxSize {
-		return fiber.NewError(fiber.StatusRequestEntityTooLarge, fmt.Sprintf("sound file exceeds %d bytes", h.opts.MaxSize))
-	}
-
-	src, err := fh.Open()
+	fh, _ := c.FormFile("sound")
+	id, duration, err := h.Save(c.Context(), account.UserID(c), c.FormValue("code"), fh)
 	if err != nil {
 		return err
+	}
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"id":       id,
+		"duration": duration.Seconds(),
+	})
+}
+
+func (h *Handler) Save(ctx context.Context, userID, rawCode string, fh *multipart.FileHeader) (string, time.Duration, error) {
+	if userID == "" && !h.opts.AnonymousUploads {
+		return "", 0, fiber.NewError(fiber.StatusUnauthorized, "authentication is required to upload sounds")
+	}
+
+	code, err := uploadCode(rawCode)
+	if err != nil {
+		return "", 0, fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	if fh == nil {
+		return "", 0, fiber.NewError(fiber.StatusBadRequest, `missing "sound" file field`)
+	}
+	if fh.Size == 0 {
+		return "", 0, fiber.NewError(fiber.StatusBadRequest, "sound file is empty")
+	}
+	if fh.Size > h.opts.MaxSize {
+		return "", 0, fiber.NewError(fiber.StatusRequestEntityTooLarge, fmt.Sprintf("sound file exceeds %d bytes", h.opts.MaxSize))
+	}
+
+	id, duration, err := h.ingest(ctx, userID, code, fh)
+	var fe *fiber.Error
+	if err != nil && !errors.As(err, &fe) {
+		log.Printf("sounds: saving upload: %v", err)
+		return "", 0, fiber.ErrInternalServerError
+	}
+	return id, duration, err
+}
+
+func (h *Handler) ingest(ctx context.Context, userID, code string, fh *multipart.FileHeader) (string, time.Duration, error) {
+	src, err := fh.Open()
+	if err != nil {
+		return "", 0, err
 	}
 	defer src.Close()
 
 	tmp, err := os.CreateTemp("", "tinyrewards-upload-*")
 	if err != nil {
-		return err
+		return "", 0, err
 	}
 	defer os.Remove(tmp.Name())
 	_, err = io.Copy(tmp, src)
@@ -84,12 +105,12 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 		err = cerr
 	}
 	if err != nil {
-		return err
+		return "", 0, err
 	}
 
 	out, err := os.CreateTemp("", "tinyrewards-sound-*."+storedExtension)
 	if err != nil {
-		return err
+		return "", 0, err
 	}
 	processed := out.Name()
 	out.Close()
@@ -97,22 +118,19 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 
 	id := rand.Text()
 
-	ctx, cancel := context.WithTimeout(c.Context(), processTimeout)
+	ctx, cancel := context.WithTimeout(ctx, processTimeout)
 	defer cancel()
 
 	duration, err := Process(ctx, tmp.Name(), processed, h.opts.MaxDuration)
-	if err != nil {
-		switch {
-		case errors.Is(err, ErrUnsupportedFormat):
-			return fiber.NewError(fiber.StatusUnsupportedMediaType, err.Error())
-		case errors.Is(err, ErrTooLong):
-			return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
-		case errors.Is(err, ErrInvalidSound):
-			return fiber.NewError(fiber.StatusBadRequest, ErrInvalidSound.Error())
-		default:
-			log.Printf("sounds: processing upload: %v", err)
-			return fiber.ErrInternalServerError
-		}
+	switch {
+	case errors.Is(err, ErrUnsupportedFormat):
+		return "", 0, fiber.NewError(fiber.StatusUnsupportedMediaType, err.Error())
+	case errors.Is(err, ErrTooLong):
+		return "", 0, fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
+	case errors.Is(err, ErrInvalidSound):
+		return "", 0, fiber.NewError(fiber.StatusBadRequest, ErrInvalidSound.Error())
+	case err != nil:
+		return "", 0, fmt.Errorf("processing: %w", err)
 	}
 
 	salt := ""
@@ -121,7 +139,7 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 	}
 	size, fileID, err := digest(processed, salt)
 	if err != nil {
-		return err
+		return "", 0, err
 	}
 
 	file := storedFile{
@@ -141,12 +159,8 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 		return h.opts.Storage.Put(ctx, key, f, size, storedMime)
 	})
 	if err != nil {
-		log.Printf("sounds: storing upload: %v", err)
-		return fiber.ErrInternalServerError
+		return "", 0, fmt.Errorf("storing: %w", err)
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"id":       id,
-		"duration": duration.Seconds(),
-	})
+	return id, duration, nil
 }

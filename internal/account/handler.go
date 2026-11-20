@@ -62,17 +62,12 @@ func NewHandler(opts Options) *Handler {
 	return h
 }
 
-type loginResponse struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
-	User      User      `json:"user"`
+func (h *Handler) Register(api fiber.Router) {
+	api.Get("/account", h.Authenticate, h.Me)
 }
 
-func (h *Handler) Register(router fiber.Router) {
-	router.Get("/account", h.Authenticate, h.Me)
-	if h.twitch != nil {
-		router.Get("/account/login/twitch", h.LoginTwitch)
-	}
+func (h *Handler) TwitchEnabled() bool {
+	return h.twitch != nil
 }
 
 func (h *Handler) LoginTwitch(c fiber.Ctx) error {
@@ -127,7 +122,8 @@ func (h *Handler) LoginTwitch(c fiber.Ctx) error {
 		return fiber.ErrInternalServerError
 	}
 
-	return c.JSON(loginResponse{Token: token, ExpiresAt: expires.UTC(), User: u})
+	h.setSession(c, token, expires)
+	return c.Redirect().To("/account")
 }
 
 func (h *Handler) clearState(c fiber.Ctx) {

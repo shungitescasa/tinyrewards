@@ -1,0 +1,13 @@
+{{define "title"}}{{.Code}} · {{end}}
+
+{{define "main"}}
+<section class="error box">
+	<div class="tab">{{.Code}} {{.Status}}</div>
+	<div class="content">
+		{{- if ne .Message .Status}}
+		<p>{{.Message}}</p>
+		{{- end}}
+		<a href="/">back to the front page</a>
+	</div>
+</section>
+{{end}}

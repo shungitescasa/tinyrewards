@@ -1,0 +1,38 @@
+{{define "title"}}Rewards · {{end}}
+
+{{define "main"}}
+<aside>
+	<a href="/rewards/new" class="button green">new reward</a>
+
+	<form action="/rewards" method="get" class="box">
+		<div class="tab">OBS widget</div>
+		<div class="content form">
+			<input type="text" value="{{.WidgetURL}}" aria-label="widget link" readonly>
+			<p class="hint">Add this link as a browser source in OBS.</p>
+
+			<label>
+				<input type="checkbox" name="emote_mode" value="every" {{- if .Every}} checked{{end}}>
+				play every match in a message
+			</label>
+
+			<label for="delay">Cooldown, ms</label>
+			<input type="number" id="delay" name="delay" min="0" step="100" value="{{.Delay}}">
+
+			<button type="submit">update link</button>
+		</div>
+	</form>
+</aside>
+
+<article>
+	<section class="box">
+		<div class="tab">Your rewards</div>
+		<div class="content">
+			{{- if .Rewards}}
+			{{template "rewards" .}}
+			{{- else}}
+			<p>No rewards yet. <a href="/rewards/new">Create the first one</a>.</p>
+			{{- end}}
+		</div>
+	</section>
+</article>
+{{end}}

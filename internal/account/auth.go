@@ -43,7 +43,7 @@ func UserID(c fiber.Ctx) string {
 }
 
 func (h *Handler) Me(c fiber.Ctx) error {
-	u, err := h.findByID(c.Context(), UserID(c))
+	u, err := h.FindByID(c.Context(), UserID(c))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fiber.NewError(fiber.StatusUnauthorized, "user no longer exists")

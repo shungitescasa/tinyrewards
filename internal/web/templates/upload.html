@@ -1,0 +1,30 @@
+{{define "title"}}Upload · {{end}}
+
+{{define "main"}}
+<article class="narrow">
+	<h1>Upload a sound</h1>
+
+	{{- if .Allowed}}
+	<form action="/sounds/upload" method="post" enctype="multipart/form-data" class="box">
+		<div class="tab">New sound</div>
+		<div class="content form">
+			<label for="code">Name</label>
+			<input type="text" id="code" name="code" value="{{.Code}}" maxlength="255"
+				placeholder="how should it be called?" autocomplete="off" required>
+
+			<label for="sound">File</label>
+			<input type="file" id="sound" name="sound" accept=".ogg,.wav,.mp3,audio/ogg,audio/wav,audio/mpeg" required>
+			<p class="hint">ogg, wav or mp3, up to {{.MaxSize}} and {{.MaxDuration}} long.</p>
+
+			{{- if not .Viewer}}
+			<p class="hint">You are not logged in, so the sound will be uploaded anonymously.</p>
+			{{- end}}
+
+			<button type="submit" class="green">Upload</button>
+		</div>
+	</form>
+	{{- else}}
+	<p><a href="/account/login">Log in</a> to upload sounds.</p>
+	{{- end}}
+</article>
+{{end}}

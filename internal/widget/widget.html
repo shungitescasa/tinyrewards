@@ -233,7 +233,7 @@
 
 			async function start() {
 				notify('Loading rewards...');
-				const rewards = await api('/rewards/' + userId, 'rewards');
+				const rewards = await api('/api/rewards/' + userId, 'rewards');
 				notify('Loaded ' + plural(rewards.length, 'reward'));
 
 				const patterns = [];
@@ -261,7 +261,7 @@
 				}
 
 				notify('Loading emotes...');
-				const chat = await api('/widget/' + userId + '/chat', 'emotes');
+				const chat = await api('/api/widget/' + userId + '/chat', 'emotes');
 				const emotes = new Map();
 				for (const emote of chat.emotes) {
 					if (!emotes.has(emote.name)) emotes.set(emote.name, emote.provider + ':' + emote.id);
