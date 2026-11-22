@@ -44,7 +44,7 @@ func (h *Handler) AnonuploadEnabled() bool {
 	return h.opts.Anonupload != nil
 }
 
-func (h *Handler) TwitchClipsEnabled() bool {
+func (h *Handler) ChannelPointsEnabled() bool {
 	return h.opts.Twitch != nil
 }
 
@@ -100,7 +100,7 @@ func (h *Handler) Create(ctx context.Context, baseURL, userID, rawType, rawData,
 		return Reward{}, fiber.NewError(fiber.StatusBadRequest, `missing "upload_id" field`)
 	case action == ActionAnonupload && !h.AnonuploadEnabled():
 		return Reward{}, fiber.NewError(fiber.StatusUnprocessableEntity, ErrAnonDisabled.Error())
-	case action == ActionTwitchClip && !h.TwitchClipsEnabled():
+	case (action == ActionTwitchClip || action == ActionYouTube) && !h.ChannelPointsEnabled():
 		return Reward{}, fiber.NewError(fiber.StatusUnprocessableEntity, ErrTwitchDisabled.Error())
 	case action != ActionSound && rewardType != TypeTwitchReward:
 		return Reward{}, fiber.NewError(fiber.StatusBadRequest, ErrActionType.Error())

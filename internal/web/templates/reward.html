@@ -5,16 +5,18 @@
 	<h1>New reward</h1>
 
 	<section class="box">
-		{{- if or .Anonupload .TwitchClips}}
+		{{- if or .Anonupload .ChannelPoints}}
 		<nav class="tabs">
 			<a href="/rewards/new?type={{.Type}}" {{- if eq .Action "sound" }} class="active" {{- end}}>Sound</a>
 			{{- if .Anonupload}}
 			<a href="/rewards/new?action=anonupload" {{- if eq .Action "anonupload" }} class="active" {{- end}}>Random
 				media</a>
 			{{- end}}
-			{{- if .TwitchClips}}
+			{{- if .ChannelPoints}}
 			<a href="/rewards/new?action=twitch_clip" {{- if eq .Action "twitch_clip" }} class="active" {{- end}}>Twitch
 				clip</a>
+			<a href="/rewards/new?action=youtube" {{- if eq .Action "youtube" }} class="active" {{- end}}>YouTube
+				video</a>
 			{{- end}}
 		</nav>
 		{{- else}}
@@ -31,6 +33,12 @@
 			</p>
 			<p class="hint">Turn on "Require Viewer to Enter Text" for the reward in your Twitch creator dashboard.
 				Only channel point rewards can trigger clips.</p>
+			{{- else if eq .Action "youtube"}}
+			<p>The YouTube video the viewer links when redeeming, e.g. <code>https://youtu.be/dQw4w9WgXcQ</code>. The
+				message must contain only the link. A <code>t=</code> timestamp in the link is respected. The video
+				plays to the end, then disappears.</p>
+			<p class="hint">Turn on "Require Viewer to Enter Text" for the reward in your Twitch creator dashboard.
+				Only channel point rewards can trigger YouTube videos.</p>
 			{{- else if .Upload}}
 			<div class="track">
 				<div class="info">
@@ -108,7 +116,8 @@
 				{{- end}}
 			</select>
 			<p class="hint">A custom reward from your Twitch channel. {{if eq .Action "anonupload"}}A random post is
-				shown{{else if eq .Action "twitch_clip"}}A random clip plays{{else}}The sound plays{{end}} every time a
+				shown{{else if eq .Action "twitch_clip"}}A random clip plays{{else if eq
+				.Action "youtube"}}The linked video plays{{else}}The sound plays{{end}} every time a
 				viewer redeems it.</p>
 			{{- else}}
 			<p>Your channel has no custom channel point rewards yet. Create one in your Twitch creator dashboard, then

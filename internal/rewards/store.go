@@ -28,9 +28,10 @@ const (
 	ActionSound      = "sound"
 	ActionAnonupload = "anonupload"
 	ActionTwitchClip = "twitch_clip"
+	ActionYouTube    = "youtube"
 )
 
-var actions = []string{ActionSound, ActionAnonupload, ActionTwitchClip}
+var actions = []string{ActionSound, ActionAnonupload, ActionTwitchClip, ActionYouTube}
 
 const (
 	maxDataLength        = 65535

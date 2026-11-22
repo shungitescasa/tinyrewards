@@ -33,6 +33,7 @@
 		#media iframe {
 			display: block;
 			width: min(100vw, calc(100vh * 16 / 9));
+			height: auto;
 			aspect-ratio: 16 / 9;
 			border: 0;
 		}
@@ -69,6 +70,8 @@
 			const MIN_MEDIA_DURATION = 5000;
 			const MEDIA_LOAD_TIMEOUT = 15000;
 			const CLIP_BUFFER = 2000;
+			const AUTOPLAY_GRACE = 3000;
+			const YOUTUBE_API = 'https://www.youtube.com/iframe_api';
 			const AUDIO_EXTENSIONS = ['mp3', 'ogg', 'oga', 'opus', 'wav', 'flac', 'm4a', 'aac', 'weba'];
 			const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'm4v', 'mkv', 'ogv'];
 			const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'svg', 'apng'];
@@ -266,7 +269,111 @@
 				});
 			}
 
+			let youtubeAPI = null;
+
+			function loadYouTube() {
+				if (!youtubeAPI) {
+					youtubeAPI = new Promise((resolve, reject) => {
+						if (window.YT && window.YT.Player) return resolve(window.YT);
+						const previous = window.onYouTubeIframeAPIReady;
+						window.onYouTubeIframeAPIReady = () => {
+							if (previous) previous();
+							resolve(window.YT);
+						};
+						const script = document.createElement('script');
+						script.src = YOUTUBE_API;
+						script.onerror = () => {
+							youtubeAPI = null;
+							script.remove();
+							reject(new Error('failed to load the YouTube player'));
+						};
+						document.head.append(script);
+					});
+				}
+				return youtubeAPI;
+			}
+
+			async function showYouTube(video) {
+				let YT;
+				try {
+					YT = await loadYouTube();
+				} catch (err) {
+					console.error(err);
+					return;
+				}
+				return new Promise(resolve => {
+					const container = document.createElement('div');
+					const holder = document.createElement('div');
+					container.append(holder);
+					stage.append(container);
+
+					let player = null;
+					let startedAt = 0;
+					let finished = false;
+					let mutedRetry;
+					const finish = () => {
+						if (finished) return;
+						finished = true;
+						clearTimeout(timeout);
+						clearTimeout(mutedRetry);
+						try {
+							if (player) player.destroy();
+						} catch (err) {
+							console.error('youtube destroy', err);
+						}
+						container.remove();
+						resolve();
+					};
+					const settle = () => {
+						if (!startedAt) return finish();
+						setTimeout(finish, Math.max(0, startedAt + MIN_MEDIA_DURATION - Date.now()));
+					};
+					const timeout = setTimeout(finish, MEDIA_LOAD_TIMEOUT);
+
+					player = new YT.Player(holder, {
+						videoId: video.id,
+						playerVars: {
+							autoplay: 1,
+							start: Math.max(0, Number(video.start) || 0),
+							playsinline: 1,
+							controls: 0,
+							disablekb: 1,
+							rel: 0,
+							iv_load_policy: 3,
+							origin: location.origin,
+						},
+						events: {
+							onReady: event => {
+								event.target.unMute();
+								event.target.setVolume(100);
+								event.target.playVideo();
+								mutedRetry = setTimeout(() => {
+									if (startedAt || finished) return;
+									console.warn('autoplay with sound is blocked, playing muted', video.id);
+									event.target.mute();
+									event.target.playVideo();
+								}, AUTOPLAY_GRACE);
+							},
+							onStateChange: event => {
+								if (event.data === YT.PlayerState.PLAYING && !startedAt) {
+									startedAt = Date.now();
+									clearTimeout(timeout);
+									clearTimeout(mutedRetry);
+								} else if (event.data === YT.PlayerState.ENDED) {
+									settle();
+								}
+							},
+							onError: event => {
+								console.error('youtube playback', video.id, event.data);
+								settle();
+							},
+						},
+					});
+				});
+			}
+
 			function play(item) {
+				if (item.youtube) return showYouTube(item.youtube);
 				if (item.media) return playMedia(item.media);
 				if (item.clip) return showClip(item.clip);
 				const audio = item;
@@ -455,6 +562,11 @@
 							else console.error('no clip for redemption', redemption);
 							return;
 						}
+						if (reward.action === 'youtube') {
+							if (msg.youtube) enqueue({ youtube: msg.youtube });
+							else console.error('no youtube video for redemption', redemption);
+							return;
+						}
 						enqueue(reward.audio);
 					});
 				});
@@ -469,7 +581,7 @@
 				const emoteRewards = new Map();
 				const pointRewards = new Map();
 				for (const reward of rewards) {
-					if (reward.action === 'anonupload' || reward.action === 'twitch_clip') {
+					if (reward.action && reward.action !== 'sound') {
 						if (reward.type === 'twitch_channel_point_reward') pointRewards.set(reward.data, { action: reward.action });
 						continue;
 					}

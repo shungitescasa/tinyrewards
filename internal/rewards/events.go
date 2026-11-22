@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"git.shungites.casa/tiny/rewards/internal/twitch"
+	"git.shungites.casa/tiny/rewards/internal/youtube"
 )
 
 const (
@@ -135,6 +136,12 @@ func (h *Handler) withMedia(ctx context.Context, userID string, data []byte) []b
 			return data
 		}
 		field, value = "clip", clip
+	case action == ActionYouTube:
+		video, err := youtube.Parse(msg.Redemption.UserInput)
+		if err != nil {
+			return data
+		}
+		field, value = "youtube", video
 	default:
 		return data
 	}
