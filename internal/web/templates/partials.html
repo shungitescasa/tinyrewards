@@ -59,6 +59,8 @@
 					random Twitch clip from the viewer's message
 					{{- else if eq .Action "youtube"}}
 					YouTube video from the viewer's message
+					{{- else if eq .Action "skip"}}
+					skip what's playing
 					{{- end}}
 				</td>
 				<td>{{date .CreatedAt}}</td>

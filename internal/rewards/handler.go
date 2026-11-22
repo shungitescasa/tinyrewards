@@ -102,7 +102,7 @@ func (h *Handler) Create(ctx context.Context, baseURL, userID, rawType, rawData,
 		return Reward{}, fiber.NewError(fiber.StatusUnprocessableEntity, ErrAnonDisabled.Error())
 	case (action == ActionTwitchClip || action == ActionYouTube) && !h.ChannelPointsEnabled():
 		return Reward{}, fiber.NewError(fiber.StatusUnprocessableEntity, ErrTwitchDisabled.Error())
-	case action != ActionSound && rewardType != TypeTwitchReward:
+	case action != ActionSound && action != ActionSkip && rewardType != TypeTwitchReward:
 		return Reward{}, fiber.NewError(fiber.StatusBadRequest, ErrActionType.Error())
 	}
 

@@ -168,8 +168,9 @@
 				return ['video', 'img'];
 			}
 
-			function show(tag, url) {
+			function show(tag, url, signal) {
 				return new Promise(resolve => {
+					if (signal.aborted) return resolve(true);
 					const element = document.createElement(tag);
 					element.referrerPolicy = 'no-referrer';
 					let loaded = false;
@@ -183,6 +184,7 @@
 						resolve(ok);
 					};
 					const timeout = setTimeout(() => finish(loaded), MEDIA_LOAD_TIMEOUT);
+					signal.addEventListener('abort', () => finish(true), { once: true });
 					const started = () => {
 						loaded = true;
 						startedAt = Date.now();
@@ -225,15 +227,16 @@
 				});
 			}
 
-			async function playMedia({ url, mime }) {
+			async function playMedia({ url, mime }, signal) {
 				for (const tag of mediaKind(url, mime)) {
-					if (await show(tag, url)) return;
+					if (await show(tag, url, signal) || signal.aborted) return;
 				}
 				console.error('unsupported media', url);
 			}
 
-			function showClip(clip) {
+			function showClip(clip, signal) {
 				return new Promise(resolve => {
+					if (signal.aborted) return resolve();
 					let src;
 					try {
 						src = new URL(clip.embed_url);
@@ -257,6 +260,7 @@
 						resolve();
 					};
 					const timeout = setTimeout(finish, MEDIA_LOAD_TIMEOUT);
+					signal.addEventListener('abort', finish, { once: true });
 					frame.addEventListener('load', () => {
 						clearTimeout(timeout);
 						const length = Math.max(MIN_MEDIA_DURATION, (Number(clip.duration) || 0) * 1000 + CLIP_BUFFER);
@@ -291,7 +295,7 @@
 				return youtubeAPI;
 			}
 
-			async function showYouTube(video) {
+			async function showYouTube(video, signal) {
 				let YT;
 				try {
 					YT = await loadYouTube();
@@ -299,6 +303,7 @@
 					console.error(err);
 					return;
 				}
+				if (signal.aborted) return;
 				return new Promise(resolve => {
 					const container = document.createElement('div');
 					const holder = document.createElement('div');
@@ -327,6 +332,7 @@
 						setTimeout(finish, Math.max(0, startedAt + MIN_MEDIA_DURATION - Date.now()));
 					};
 					const timeout = setTimeout(finish, MEDIA_LOAD_TIMEOUT);
+					signal.addEventListener('abort', finish, { once: true });
 
 					player = new YT.Player(holder, {
 						videoId: video.id,
@@ -370,22 +376,29 @@
 				});
 			}
 
-			function showVisual(item) {
-				if (item.youtube) return showYouTube(item.youtube);
-				if (item.media) return playMedia(item.media);
-				if (item.clip) return showClip(item.clip);
+			function showVisual(item, signal) {
+				if (item.youtube) return showYouTube(item.youtube, signal);
+				if (item.media) return playMedia(item.media, signal);
+				if (item.clip) return showClip(item.clip, signal);
 				return Promise.resolve();
 			}
 
-			function playSound(audio) {
+			function playSound(audio, signal) {
 				return new Promise(resolve => {
+					if (signal.aborted) return resolve();
 					const done = () => {
 						audio.removeEventListener('ended', done);
 						audio.removeEventListener('error', done);
+						signal.removeEventListener('abort', stop);
 						resolve();
+					};
+					const stop = () => {
+						audio.pause();
+						done();
 					};
 					audio.addEventListener('ended', done);
 					audio.addEventListener('error', done);
+					signal.addEventListener('abort', stop, { once: true });
 					if (audio.error) audio.load();
 					audio.currentTime = 0;
 					audio.play().catch(done);
@@ -395,22 +408,39 @@
 			function createQueue(run) {
 				const items = [];
 				let draining = false;
+				let current = null;
 				const drain = async () => {
 					if (draining) return;
 					draining = true;
 					while (items.length) {
-						await run(items.shift());
+						current = new AbortController();
+						try {
+							await run(items.shift(), current.signal);
+						} catch (err) {
+							console.error('queue', err);
+						}
+						current = null;
 					}
 					draining = false;
 				};
-				return item => {
-					items.push(item);
-					drain();
+				return {
+					push(item) {
+						items.push(item);
+						drain();
+					},
+					skip() {
+						if (current) current.abort();
+					},
 				};
 			}
 
-			const enqueue = createQueue(playSound);
-			const enqueueVisual = createQueue(showVisual);
+			const soundQueue = createQueue(playSound);
+			const visualQueue = createQueue(showVisual);
+
+			function skip() {
+				soundQueue.skip();
+				visualQueue.skip();
+			}
 
 			function compile(pattern) {
 				try {
@@ -560,21 +590,25 @@
 						const reward = pointRewards.get(redemption.reward_id);
 						if (!reward) return;
 						if (reward.action === 'anonupload') {
-							if (Array.isArray(msg.media) && msg.media.length) msg.media.forEach(item => enqueueVisual({ media: item }));
+							if (Array.isArray(msg.media) && msg.media.length) msg.media.forEach(item => visualQueue.push({ media: item }));
 							else console.error('no media for redemption', redemption);
 							return;
 						}
 						if (reward.action === 'twitch_clip') {
-							if (msg.clip) enqueueVisual({ clip: msg.clip });
+							if (msg.clip) visualQueue.push({ clip: msg.clip });
 							else console.error('no clip for redemption', redemption);
 							return;
 						}
 						if (reward.action === 'youtube') {
-							if (msg.youtube) enqueueVisual({ youtube: msg.youtube });
+							if (msg.youtube) visualQueue.push({ youtube: msg.youtube });
 							else console.error('no youtube video for redemption', redemption);
 							return;
 						}
-						enqueue(reward.audio);
+						if (reward.action === 'skip') {
+							skip();
+							return;
+						}
+						soundQueue.push(reward.audio);
 					});
 				});
 			}
@@ -588,6 +622,17 @@
 				const emoteRewards = new Map();
 				const pointRewards = new Map();
 				for (const reward of rewards) {
+					if (reward.action === 'skip') {
+						if (reward.type === 'chat') {
+							const regex = compile(reward.data);
+							if (regex) patterns.push({ regex, fire: skip });
+						} else if (reward.type === 'chat_emote') {
+							emoteRewards.set(reward.data, skip);
+						} else if (reward.type === 'twitch_channel_point_reward') {
+							pointRewards.set(reward.data, { action: reward.action });
+						}
+						continue;
+					}
 					if (reward.action && reward.action !== 'sound') {
 						if (reward.type === 'twitch_channel_point_reward') pointRewards.set(reward.data, { action: reward.action });
 						continue;
@@ -595,11 +640,12 @@
 					if (!reward.upload) continue;
 					const audio = player(reward.upload.files);
 					if (!audio) continue;
+					const fire = () => soundQueue.push(audio);
 					if (reward.type === 'chat') {
 						const regex = compile(reward.data);
-						if (regex) patterns.push({ regex, audio });
+						if (regex) patterns.push({ regex, fire });
 					} else if (reward.type === 'chat_emote') {
-						emoteRewards.set(reward.data, audio);
+						emoteRewards.set(reward.data, fire);
 					} else if (reward.type === 'twitch_channel_point_reward') {
 						pointRewards.set(reward.data, { action: 'sound', audio });
 					}
@@ -644,25 +690,25 @@
 					connect(chat.channel.toLowerCase(), resolve, raw => {
 						const action = /^\x01ACTION (.*)\x01$/s.exec(raw);
 						const text = (action ? action[1] : raw).replace(/\u{E0000}/gu, '');
-						const sounds = [];
+						const triggers = [];
 
-						for (const { regex, audio } of patterns) {
+						for (const { regex, fire } of patterns) {
 							const match = regex.exec(text);
-							if (match) sounds.push({ index: match.index, audio });
+							if (match) triggers.push({ index: match.index, fire });
 						}
 
 						for (const word of text.matchAll(/\S+/g)) {
 							const key = emotes.get(word[0]);
-							const audio = key && emoteRewards.get(key);
-							if (audio) sounds.push({ index: word.index, audio });
+							const fire = key && emoteRewards.get(key);
+							if (fire) triggers.push({ index: word.index, fire });
 						}
 
 						const now = Date.now();
-						if (!sounds.length || now - lastPlayed < delay) return;
+						if (!triggers.length || now - lastPlayed < delay) return;
 						lastPlayed = now;
-						sounds.sort((a, b) => a.index - b.index);
-						if (emoteMode === 'once') sounds.length = 1;
-						sounds.forEach(sound => enqueue(sound.audio));
+						triggers.sort((a, b) => a.index - b.index);
+						if (emoteMode === 'once') triggers.length = 1;
+						triggers.forEach(trigger => trigger.fire());
 					});
 				});
 				return true;

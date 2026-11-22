@@ -111,11 +111,12 @@ func (h *Handler) renderReward(c fiber.Ctx, status int, v *account.User, rewardT
 	switch {
 	case action == rewards.ActionAnonupload && anonupload:
 	case action == rewards.ActionTwitchClip && points, action == rewards.ActionYouTube && points:
+	case action == rewards.ActionSkip:
 	default:
 		action = rewards.ActionSound
 	}
 	switch {
-	case action != rewards.ActionSound:
+	case action != rewards.ActionSound && action != rewards.ActionSkip:
 		rewardType = rewards.TypeTwitchReward
 	case rewardType == rewards.TypeChatEmote, rewardType == rewards.TypeTwitchReward:
 	default:

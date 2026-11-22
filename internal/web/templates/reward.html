@@ -5,7 +5,6 @@
 	<h1>New reward</h1>
 
 	<section class="box">
-		{{- if or .Anonupload .ChannelPoints}}
 		<nav class="tabs">
 			<a href="/rewards/new?type={{.Type}}" {{- if eq .Action "sound" }} class="active" {{- end}}>Sound</a>
 			{{- if .Anonupload}}
@@ -18,12 +17,15 @@
 			<a href="/rewards/new?action=youtube" {{- if eq .Action "youtube" }} class="active" {{- end}}>YouTube
 				video</a>
 			{{- end}}
+			<a href="/rewards/new?action=skip&amp;type={{.Type}}" {{- if eq .Action "skip" }} class="active" {{-
+				end}}>Skip</a>
 		</nav>
-		{{- else}}
-		<div class="tab">Sound</div>
-		{{- end}}
 		<div class="content">
-			{{- if eq .Action "anonupload"}}
+			{{- if eq .Action "skip"}}
+			<p>Stops whatever is playing on the widget right now: the current sound and the current media, clip or
+				video. Queued rewards play next.</p>
+			<p class="hint">Works with chat messages, emotes and channel points.</p>
+			{{- else if eq .Action "anonupload"}}
 			<p>A random post from Anonupload. Audio and video play to the end, images stay on screen for a few seconds.
 			</p>
 			<p class="hint">Only channel point rewards can trigger random media.</p>
@@ -71,16 +73,19 @@
 	</section>
 
 	<form action="/rewards/new" method="post" class="box">
-		{{- if ne .Action "sound"}}
+		{{- if and (ne .Action "sound") (ne .Action "skip")}}
 		<div class="tab">Channel points</div>
 		{{- else}}
 		<nav class="tabs">
-			<a href="/rewards/new?type=chat{{with .Upload}}&amp;upload={{.ID}}{{end}}" {{- if eq .Type "chat" }}
-				class="active" {{- end}}>Chat message</a>
-			<a href="/rewards/new?type=chat_emote{{with .Upload}}&amp;upload={{.ID}}{{end}}" {{- if eq
-				.Type "chat_emote" }} class="active" {{- end}}>Emote</a>
-			<a href="/rewards/new?type=twitch_channel_point_reward{{with .Upload}}&amp;upload={{.ID}}{{end}}" {{- if eq
-				.Type "twitch_channel_point_reward" }} class="active" {{- end}}>Channel points</a>
+			<a href="/rewards/new?type=chat{{if eq $.Action " skip"}}&amp;action=skip{{else if
+				$.Upload}}&amp;upload={{$.Upload.ID}}{{end}}" {{- if eq .Type "chat" }} class="active" {{- end}}>Chat
+				message</a>
+			<a href="/rewards/new?type=chat_emote{{if eq $.Action " skip"}}&amp;action=skip{{else if
+				$.Upload}}&amp;upload={{$.Upload.ID}}{{end}}" {{- if eq .Type "chat_emote" }} class="active" {{-
+				end}}>Emote</a>
+			<a href="/rewards/new?type=twitch_channel_point_reward{{if eq $.Action " skip"}}&amp;action=skip{{else if
+				$.Upload}}&amp;upload={{$.Upload.ID}}{{end}}" {{- if eq .Type "twitch_channel_point_reward" }}
+				class="active" {{- end}}>Channel points</a>
 		</nav>
 		{{- end}}
 		<div class="content form">
@@ -117,7 +122,8 @@
 			</select>
 			<p class="hint">A custom reward from your Twitch channel. {{if eq .Action "anonupload"}}A random post is
 				shown{{else if eq .Action "twitch_clip"}}A random clip plays{{else if eq
-				.Action "youtube"}}The linked video plays{{else}}The sound plays{{end}} every time a
+				.Action "youtube"}}The linked video plays{{else if eq .Action "skip"}}The current reward is
+				skipped{{else}}The sound plays{{end}} every time a
 				viewer redeems it.</p>
 			{{- else}}
 			<p>Your channel has no custom channel point rewards yet. Create one in your Twitch creator dashboard, then
