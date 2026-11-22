@@ -27,9 +27,10 @@ var types = []string{TypeChat, TypeChatEmote, TypeTwitchReward}
 const (
 	ActionSound      = "sound"
 	ActionAnonupload = "anonupload"
+	ActionTwitchClip = "twitch_clip"
 )
 
-var actions = []string{ActionSound, ActionAnonupload}
+var actions = []string{ActionSound, ActionAnonupload, ActionTwitchClip}
 
 const (
 	maxDataLength        = 65535
@@ -55,7 +56,7 @@ var (
 	ErrUploadNotFound = errors.New("upload not found")
 	ErrInvalidAction  = fmt.Errorf("action must be one of: %s", strings.Join(actions, ", "))
 	ErrAnonDisabled   = errors.New("anonupload rewards are not enabled on this instance")
-	ErrAnonType       = errors.New("anonupload rewards can only be triggered by channel point rewards")
+	ErrActionType     = errors.New("only channel point rewards can trigger this action")
 	ErrDuplicate      = errors.New("reward with this type and data already exists")
 	ErrRewardNotFound = errors.New("reward not found")
 )

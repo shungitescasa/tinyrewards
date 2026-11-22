@@ -85,12 +85,12 @@ type Auth struct {
 }
 
 type Config struct {
-	Server   Server
-	Database Database
-	Files    Files
-	Sounds   Sounds
-	S3       S3
-	Twitch   Twitch
+	Server     Server
+	Database   Database
+	Files      Files
+	Sounds     Sounds
+	S3         S3
+	Twitch     Twitch
 	Emotes     Emotes
 	Anonupload Anonupload
 	Auth       Auth

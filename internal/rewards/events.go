@@ -3,12 +3,15 @@ package rewards
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
+
+	"git.shungites.casa/tiny/rewards/internal/twitch"
 )
 
 const (
@@ -91,13 +94,14 @@ func (h *Handler) Events(conn *websocket.Conn) {
 }
 
 func (h *Handler) withMedia(ctx context.Context, userID string, data []byte) []byte {
-	if h.opts.Anonupload == nil {
+	if h.opts.Anonupload == nil && h.opts.Twitch == nil {
 		return data
 	}
 	var msg struct {
 		Type       string `json:"type"`
 		Redemption *struct {
-			RewardID string `json:"reward_id"`
+			RewardID  string `json:"reward_id"`
+			UserInput string `json:"user_input"`
 		} `json:"redemption"`
 	}
 	if err := json.Unmarshal(data, &msg); err != nil || msg.Type != "redemption" || msg.Redemption == nil {
@@ -109,15 +113,29 @@ func (h *Handler) withMedia(ctx context.Context, userID string, data []byte) []b
 		log.Printf("rewards: looking up reward action for %s: %v", userID, err)
 		return data
 	}
-	if action != ActionAnonupload {
-		return data
-	}
 
 	ctx, cancel := context.WithTimeout(ctx, mediaTimeout)
 	defer cancel()
-	media, err := h.opts.Anonupload.Random(ctx)
-	if err != nil {
-		log.Printf("rewards: fetching random anonupload post for %s: %v", userID, err)
+
+	var (
+		field string
+		value any
+	)
+	switch {
+	case action == ActionAnonupload && h.opts.Anonupload != nil:
+		media, err := h.opts.Anonupload.Random(ctx)
+		if err != nil {
+			log.Printf("rewards: fetching random anonupload post for %s: %v", userID, err)
+			return data
+		}
+		field, value = "media", media
+	case action == ActionTwitchClip && h.opts.Twitch != nil:
+		clip, err := h.randomClip(ctx, userID, msg.Redemption.UserInput)
+		if err != nil {
+			return data
+		}
+		field, value = "clip", clip
+	default:
 		return data
 	}
 
@@ -125,7 +143,7 @@ func (h *Handler) withMedia(ctx context.Context, userID string, data []byte) []b
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return data
 	}
-	if fields["media"], err = json.Marshal(media); err != nil {
+	if fields[field], err = json.Marshal(value); err != nil {
 		return data
 	}
 	out, err := json.Marshal(fields)
@@ -133,4 +151,19 @@ func (h *Handler) withMedia(ctx context.Context, userID string, data []byte) []b
 		return data
 	}
 	return out
+}
+
+func (h *Handler) randomClip(ctx context.Context, userID, input string) (twitch.Clip, error) {
+	login, err := twitch.ParseLogin(input)
+	if err == nil {
+		var clip twitch.Clip
+		clip, err = h.opts.Twitch.RandomClip(ctx, userID, login)
+		if err == nil {
+			return clip, nil
+		}
+	}
+	if !errors.Is(err, twitch.ErrInvalidChannel) && !errors.Is(err, twitch.ErrChannelNotFound) && !errors.Is(err, twitch.ErrNoClips) {
+		log.Printf("rewards: fetching random twitch clip for %s: %v", userID, err)
+	}
+	return twitch.Clip{}, err
 }

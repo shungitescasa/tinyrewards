@@ -30,6 +30,13 @@
 			pointer-events: none;
 		}
 
+		#media iframe {
+			display: block;
+			width: min(100vw, calc(100vh * 16 / 9));
+			aspect-ratio: 16 / 9;
+			border: 0;
+		}
+
 		#media img,
 		#media video {
 			display: block;
@@ -61,6 +68,7 @@
 			const EVENTS_TIMEOUT = 75000;
 			const MIN_MEDIA_DURATION = 5000;
 			const MEDIA_LOAD_TIMEOUT = 15000;
+			const CLIP_BUFFER = 2000;
 			const AUDIO_EXTENSIONS = ['mp3', 'ogg', 'oga', 'opus', 'wav', 'flac', 'm4a', 'aac', 'weba'];
 			const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'm4v', 'mkv', 'ogv'];
 			const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'svg', 'apng'];
@@ -223,8 +231,44 @@
 				console.error('unsupported media', url);
 			}
 
+			function showClip(clip) {
+				return new Promise(resolve => {
+					let src;
+					try {
+						src = new URL(clip.embed_url);
+					} catch (err) {
+						console.error('invalid clip', clip, err);
+						return resolve();
+					}
+					src.searchParams.set('parent', location.hostname);
+					src.searchParams.set('autoplay', 'true');
+					src.searchParams.set('muted', 'false');
+
+					const frame = document.createElement('iframe');
+					frame.allow = 'autoplay; fullscreen';
+					frame.title = clip.title || 'Twitch clip';
+					let finished = false;
+					const finish = () => {
+						if (finished) return;
+						finished = true;
+						clearTimeout(timeout);
+						frame.remove();
+						resolve();
+					};
+					const timeout = setTimeout(finish, MEDIA_LOAD_TIMEOUT);
+					frame.addEventListener('load', () => {
+						clearTimeout(timeout);
+						const length = Math.max(MIN_MEDIA_DURATION, (Number(clip.duration) || 0) * 1000 + CLIP_BUFFER);
+						setTimeout(finish, length);
+					}, { once: true });
+					frame.src = src.toString();
+					stage.append(frame);
+				});
+			}
+
 			function play(item) {
 				if (item.media) return playMedia(item.media);
+				if (item.clip) return showClip(item.clip);
 				const audio = item;
 				return new Promise(resolve => {
 					const done = () => {
@@ -384,7 +428,7 @@
 								notify('Channel points: ' + msg.message);
 								break;
 							case 'redemption':
-								onRedemption(msg.redemption, msg.media);
+								onRedemption(msg.redemption, msg);
 								break;
 						}
 					};
@@ -398,12 +442,17 @@
 
 			function startRedemptions(pointRewards) {
 				return new Promise(resolve => {
-					listen(() => resolve(true), (redemption, media) => {
+					listen(() => resolve(true), (redemption, msg) => {
 						const reward = pointRewards.get(redemption.reward_id);
 						if (!reward) return;
 						if (reward.action === 'anonupload') {
-							if (Array.isArray(media) && media.length) media.forEach(item => enqueue({ media: item }));
+							if (Array.isArray(msg.media) && msg.media.length) msg.media.forEach(item => enqueue({ media: item }));
 							else console.error('no media for redemption', redemption);
+							return;
+						}
+						if (reward.action === 'twitch_clip') {
+							if (msg.clip) enqueue({ clip: msg.clip });
+							else console.error('no clip for redemption', redemption);
 							return;
 						}
 						enqueue(reward.audio);
@@ -420,7 +469,7 @@
 				const emoteRewards = new Map();
 				const pointRewards = new Map();
 				for (const reward of rewards) {
-					if (reward.action === 'anonupload') {
+					if (reward.action === 'anonupload' || reward.action === 'twitch_clip') {
 						if (reward.type === 'twitch_channel_point_reward') pointRewards.set(reward.data, { action: reward.action });
 						continue;
 					}

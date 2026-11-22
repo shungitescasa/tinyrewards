@@ -58,8 +58,9 @@ type Client struct {
 	http       *http.Client
 	refreshing sync.Mutex
 
-	mu      sync.Mutex
-	rewards map[string]rewardsEntry
+	mu        sync.Mutex
+	rewards   map[string]rewardsEntry
+	clipCache map[string]clipsEntry
 }
 
 func NewClient(opts Options) *Client {
@@ -71,8 +72,9 @@ func NewClient(opts Options) *Client {
 			ClientSecret: opts.ClientSecret,
 			Endpoint:     twitch.Endpoint,
 		},
-		http:    &http.Client{Timeout: requestTimeout},
-		rewards: map[string]rewardsEntry{},
+		http:      &http.Client{Timeout: requestTimeout},
+		rewards:   map[string]rewardsEntry{},
+		clipCache: map[string]clipsEntry{},
 	}
 }
 

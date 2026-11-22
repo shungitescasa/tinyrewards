@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"slices"
 	"sync"
 	"time"
@@ -20,7 +21,6 @@ const (
 	welcomeTimeout   = 10 * time.Second
 	minKeepalive     = 10 * time.Second
 	keepaliveMargin  = 5 * time.Second
-	idleTimeout      = 30 * time.Second
 	maxBackoff       = time.Minute
 	maxBackoffShift  = 6
 	maxListeners     = 16
@@ -114,7 +114,6 @@ type channel struct {
 	listeners map[chan []byte]struct{}
 	status    []byte
 	cancel    context.CancelFunc
-	idle      *time.Timer
 }
 
 type EventSub struct {
@@ -147,10 +146,6 @@ func (e *EventSub) Listen(userID string) (*Listener, error) {
 	if len(ch.listeners) >= maxListeners {
 		return nil, ErrTooManyListeners
 	}
-	if ch.idle != nil {
-		ch.idle.Stop()
-		ch.idle = nil
-	}
 
 	c := make(chan []byte, listenerBuffer)
 	if ch.status != nil {
@@ -165,20 +160,11 @@ func (e *EventSub) leave(ch *channel, c chan []byte) {
 	defer e.mu.Unlock()
 
 	delete(ch.listeners, c)
-	if len(ch.listeners) > 0 || ch.idle != nil {
+	if len(ch.listeners) > 0 || e.channels[ch.userID] != ch {
 		return
 	}
-	var timer *time.Timer
-	timer = time.AfterFunc(idleTimeout, func() {
-		e.mu.Lock()
-		defer e.mu.Unlock()
-		if ch.idle != timer || e.channels[ch.userID] != ch {
-			return
-		}
-		ch.cancel()
-		delete(e.channels, ch.userID)
-	})
-	ch.idle = timer
+	ch.cancel()
+	delete(e.channels, ch.userID)
 }
 
 func (e *EventSub) broadcast(ch *channel, m message, status bool) {
@@ -241,9 +227,17 @@ func (e *EventSub) session(ctx context.Context, ch *channel, connected func()) e
 		}
 	}()
 
-	if err := e.client.subscribe(ctx, ch.userID, welcome.ID); err != nil {
+	subscriptionID, err := e.client.ensureSubscription(ctx, ch.userID, welcome.ID)
+	if err != nil {
 		return err
 	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+		defer cancel()
+		if err := e.client.unsubscribe(ctx, ch.userID, subscriptionID); err != nil {
+			log.Printf("twitch: deleting eventsub subscription for user %s: %v", ch.userID, err)
+		}
+	}()
 	connected()
 	e.broadcast(ch, message{Type: messageConnected}, true)
 
@@ -401,7 +395,112 @@ func (e *EventSub) dial(ctx context.Context, endpoint string) (*websocket.Conn, 
 	return conn, nil
 }
 
-func (c *Client) subscribe(ctx context.Context, userID, sessionID string) error {
+type subscription struct {
+	ID        string `json:"id"`
+	Status    string `json:"status"`
+	Type      string `json:"type"`
+	Condition struct {
+		BroadcasterUserID string `json:"broadcaster_user_id"`
+	} `json:"condition"`
+	Transport struct {
+		Method    string `json:"method"`
+		SessionID string `json:"session_id"`
+	} `json:"transport"`
+}
+
+func (c *Client) ensureSubscription(ctx context.Context, userID, sessionID string) (string, error) {
+	existing, err := c.subscriptions(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	id := ""
+	for _, s := range existing {
+		if id == "" && s.Status == "enabled" && s.Transport.SessionID == sessionID {
+			id = s.ID
+			continue
+		}
+		if err := c.unsubscribe(ctx, userID, s.ID); err != nil {
+			return "", err
+		}
+	}
+	if id != "" {
+		return id, nil
+	}
+
+	id, err = c.subscribe(ctx, userID, sessionID)
+	if !isStatus(err, http.StatusConflict) {
+		return id, err
+	}
+	existing, err = c.subscriptions(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	for _, s := range existing {
+		if s.Transport.SessionID == sessionID {
+			return s.ID, nil
+		}
+	}
+	return "", fmt.Errorf("subscribing to redemptions: conflicting subscription not found")
+}
+
+func (c *Client) subscriptions(ctx context.Context, userID string) ([]subscription, error) {
+	var found []subscription
+	cursor := ""
+	for {
+		var res struct {
+			Data       []subscription `json:"data"`
+			Pagination struct {
+				Cursor string `json:"cursor"`
+			} `json:"pagination"`
+		}
+		var broadcasterID string
+		err := c.call(ctx, userID, func(twitchID string) request {
+			broadcasterID = twitchID
+			query := url.Values{"type": {redemptionType}}
+			if cursor != "" {
+				query.Set("after", cursor)
+			}
+			return request{method: http.MethodGet, path: "/eventsub/subscriptions", query: query}
+		}, &res)
+		if isStatus(err, http.StatusForbidden) {
+			return nil, ErrNotAuthorized
+		}
+		if err != nil {
+			return nil, fmt.Errorf("listing eventsub subscriptions: %w", err)
+		}
+		for _, s := range res.Data {
+			if s.Type == redemptionType && s.Transport.Method == "websocket" && s.Condition.BroadcasterUserID == broadcasterID {
+				found = append(found, s)
+			}
+		}
+		if res.Pagination.Cursor == "" || res.Pagination.Cursor == cursor {
+			return found, nil
+		}
+		cursor = res.Pagination.Cursor
+	}
+}
+
+func (c *Client) unsubscribe(ctx context.Context, userID, subscriptionID string) error {
+	err := c.call(ctx, userID, func(string) request {
+		return request{
+			method: http.MethodDelete,
+			path:   "/eventsub/subscriptions",
+			query:  url.Values{"id": {subscriptionID}},
+		}
+	}, nil)
+	if isStatus(err, http.StatusNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("deleting subscription %s: %w", subscriptionID, err)
+	}
+	return nil
+}
+
+func (c *Client) subscribe(ctx context.Context, userID, sessionID string) (string, error) {
+	var res struct {
+		Data []subscription `json:"data"`
+	}
 	err := c.call(ctx, userID, func(twitchID string) request {
 		return request{
 			method: http.MethodPost,
@@ -413,12 +512,18 @@ func (c *Client) subscribe(ctx context.Context, userID, sessionID string) error 
 				"transport": map[string]string{"method": "websocket", "session_id": sessionID},
 			},
 		}
-	}, nil)
+	}, &res)
 	if isStatus(err, http.StatusForbidden) {
-		return ErrNotAuthorized
+		return "", ErrNotAuthorized
+	}
+	if isStatus(err, http.StatusConflict) {
+		return "", err
 	}
 	if err != nil {
-		return fmt.Errorf("subscribing to redemptions: %w", err)
+		return "", fmt.Errorf("subscribing to redemptions: %w", err)
 	}
-	return nil
+	if len(res.Data) == 0 {
+		return "", errors.New("subscribing to redemptions: empty response")
+	}
+	return res.Data[0].ID, nil
 }

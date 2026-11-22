@@ -55,6 +55,8 @@
 					{{template "audio" .Upload}}
 					{{- else if eq .Action "anonupload"}}
 					random media from Anonupload
+					{{- else if eq .Action "twitch_clip"}}
+					random Twitch clip from the viewer's message
 					{{- end}}
 				</td>
 				<td>{{date .CreatedAt}}</td>

@@ -107,18 +107,21 @@ func (h *Handler) deleteReward(c fiber.Ctx) error {
 
 func (h *Handler) renderReward(c fiber.Ctx, status int, v *account.User, rewardType, action, uploadID, data, message string) error {
 	ctx, baseURL := c.Context(), h.baseURL(c)
-	anonupload := h.opts.Rewards.AnonuploadEnabled()
-	if action != rewards.ActionAnonupload || !anonupload {
+	anonupload, clips := h.opts.Rewards.AnonuploadEnabled(), h.opts.Rewards.TwitchClipsEnabled()
+	switch {
+	case action == rewards.ActionAnonupload && anonupload:
+	case action == rewards.ActionTwitchClip && clips:
+	default:
 		action = rewards.ActionSound
 	}
 	switch {
-	case action == rewards.ActionAnonupload:
+	case action != rewards.ActionSound:
 		rewardType = rewards.TypeTwitchReward
 	case rewardType == rewards.TypeChatEmote, rewardType == rewards.TypeTwitchReward:
 	default:
 		rewardType = rewards.TypeChat
 	}
-	m := fiber.Map{"Type": rewardType, "Action": action, "Anonupload": anonupload, "Data": data, "Error": message}
+	m := fiber.Map{"Type": rewardType, "Action": action, "Anonupload": anonupload, "TwitchClips": clips, "Data": data, "Error": message}
 
 	var upload *sounds.Upload
 	if action == rewards.ActionSound && uploadID != "" {

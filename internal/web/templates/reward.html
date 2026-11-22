@@ -5,11 +5,17 @@
 	<h1>New reward</h1>
 
 	<section class="box">
-		{{- if .Anonupload}}
+		{{- if or .Anonupload .TwitchClips}}
 		<nav class="tabs">
 			<a href="/rewards/new?type={{.Type}}" {{- if eq .Action "sound" }} class="active" {{- end}}>Sound</a>
+			{{- if .Anonupload}}
 			<a href="/rewards/new?action=anonupload" {{- if eq .Action "anonupload" }} class="active" {{- end}}>Random
 				media</a>
+			{{- end}}
+			{{- if .TwitchClips}}
+			<a href="/rewards/new?action=twitch_clip" {{- if eq .Action "twitch_clip" }} class="active" {{- end}}>Twitch
+				clip</a>
+			{{- end}}
 		</nav>
 		{{- else}}
 		<div class="tab">Sound</div>
@@ -19,6 +25,12 @@
 			<p>A random post from Anonupload. Audio and video play to the end, images stay on screen for a few seconds.
 			</p>
 			<p class="hint">Only channel point rewards can trigger random media.</p>
+			{{- else if eq .Action "twitch_clip"}}
+			<p>A random clip from the channel the viewer types when redeeming, e.g. <code>forsen</code> or
+				<code>twitch.tv/forsen</code>. If the message is empty, a clip from your own channel plays.
+			</p>
+			<p class="hint">Turn on "Require Viewer to Enter Text" for the reward in your Twitch creator dashboard.
+				Only channel point rewards can trigger clips.</p>
 			{{- else if .Upload}}
 			<div class="track">
 				<div class="info">
@@ -51,7 +63,7 @@
 	</section>
 
 	<form action="/rewards/new" method="post" class="box">
-		{{- if eq .Action "anonupload"}}
+		{{- if ne .Action "sound"}}
 		<div class="tab">Channel points</div>
 		{{- else}}
 		<nav class="tabs">
@@ -96,7 +108,8 @@
 				{{- end}}
 			</select>
 			<p class="hint">A custom reward from your Twitch channel. {{if eq .Action "anonupload"}}A random post is
-				shown{{else}}The sound plays{{end}} every time a viewer redeems it.</p>
+				shown{{else if eq .Action "twitch_clip"}}A random clip plays{{else}}The sound plays{{end}} every time a
+				viewer redeems it.</p>
 			{{- else}}
 			<p>Your channel has no custom channel point rewards yet. Create one in your Twitch creator dashboard, then
 				reload this page.</p>
