@@ -1,11 +1,14 @@
 {{define "title"}}New reward · {{end}}
 
-{{define "main"}}
-<article class="narrow">
-	<h1>New reward</h1>
+{{define "head"}}
+<script src="{{asset `reward.js`}}" defer></script>
+{{- end}}
 
+{{define "main"}}
+<aside>
 	<section class="box">
-		<nav class="tabs">
+		<div class="tab">Action</div>
+		<nav class="list">
 			<a href="/rewards/new?type={{.Type}}" {{- if eq .Action "sound" }} class="active" {{- end}}>Sound</a>
 			{{- if .Anonupload}}
 			<a href="/rewards/new?action=anonupload" {{- if eq .Action "anonupload" }} class="active" {{- end}}>Random
@@ -20,6 +23,37 @@
 			<a href="/rewards/new?action=skip&amp;type={{.Type}}" {{- if eq .Action "skip" }} class="active" {{-
 				end}}>Skip</a>
 		</nav>
+	</section>
+
+	{{- if eq .Action "sound"}}
+	<section class="box">
+		<div class="tab">Sound</div>
+		<div class="content">
+			{{- if .Upload}}
+			{{template "player" dict "Sound" .Upload "Href" (printf "/rewards/new?type=%s" (urlquery .Type)) "Label"
+			"change"}}
+			{{- else if .Uploads}}
+			<p class="hint">Your recent uploads</p>
+			<ul class="picker">
+				{{- range .Uploads}}
+				<li>
+					{{template "player" dict "Sound" . "Href" (printf "/rewards/new?type=%s&upload=%s" (urlquery $.Type)
+					(urlquery .ID)) "Label" "select"}}
+				</li>
+				{{- end}}
+			</ul>
+			{{- else}}
+			<p>You haven't uploaded any sounds yet.</p>
+			{{- end}}
+			{{- if not .Upload}}
+			<p class="hint"><a href="/sounds/upload">Upload a new one</a> or pick any from <a href="/sounds">all
+					sounds</a>.</p>
+			{{- end}}
+		</div>
+	</section>
+	{{- else}}
+	<section class="box">
+		<div class="tab">Details</div>
 		<div class="content">
 			{{- if eq .Action "skip"}}
 			<p>Stops whatever is playing on the widget right now: the current sound and the current media, clip or
@@ -41,60 +75,76 @@
 				plays to the end, then disappears.</p>
 			<p class="hint">Turn on "Require Viewer to Enter Text" for the reward in your Twitch creator dashboard.
 				Only channel point rewards can trigger YouTube videos.</p>
-			{{- else if .Upload}}
-			{{template "player" dict "Sound" .Upload "Href" (printf "/rewards/new?type=%s" (urlquery .Type)) "Label"
-			"change"}}
-			{{- else}}
-			{{- if .Uploads}}
-			<p class="hint">Your recent uploads</p>
-			<ul class="picker">
-				{{- range .Uploads}}
-				<li>
-					{{template "player" dict "Sound" . "Href" (printf "/rewards/new?type=%s&upload=%s" (urlquery $.Type)
-					(urlquery .ID)) "Label" "select"}}
-				</li>
-				{{- end}}
-			</ul>
-			{{- else}}
-			<p>You haven't uploaded any sounds yet.</p>
-			{{- end}}
-			<p class="hint"><a href="/sounds/upload">Upload a new one</a> or pick any from <a href="/sounds">all
-					sounds</a>.</p>
 			{{- end}}
 		</div>
 	</section>
+	{{- end}}
+</aside>
 
-	<form action="/rewards/new" method="post" class="box">
+<article>
+	<h1>New reward</h1>
+
+	<section class="box">
 		{{- if and (ne .Action "sound") (ne .Action "skip")}}
 		<div class="tab">Channel points</div>
 		{{- else}}
 		<nav class="tabs">
-			<a href="/rewards/new?type=chat{{if eq $.Action " skip"}}&amp;action=skip{{else if
-				$.Upload}}&amp;upload={{$.Upload.ID}}{{end}}" {{- if eq .Type "chat" }} class="active" {{- end}}>Chat
+			<a href="/rewards/new?type=chat{{if eq .Action " skip"}}&amp;action=skip{{else if
+				.Upload}}&amp;upload={{.Upload.ID}}{{end}}" {{- if eq .Type "chat" }} class="active" {{- end}}>Chat
 				message</a>
-			<a href="/rewards/new?type=chat_emote{{if eq $.Action " skip"}}&amp;action=skip{{else if
-				$.Upload}}&amp;upload={{$.Upload.ID}}{{end}}" {{- if eq .Type "chat_emote" }} class="active" {{-
+			<a href="/rewards/new?type=chat_emote{{if eq .Action " skip"}}&amp;action=skip{{else if
+				.Upload}}&amp;upload={{.Upload.ID}}{{end}}" {{- if eq .Type "chat_emote" }} class="active" {{-
 				end}}>Emote</a>
-			<a href="/rewards/new?type=twitch_channel_point_reward{{if eq $.Action " skip"}}&amp;action=skip{{else if
-				$.Upload}}&amp;upload={{$.Upload.ID}}{{end}}" {{- if eq .Type "twitch_channel_point_reward" }}
+			<a href="/rewards/new?type=twitch_channel_point_reward{{if eq .Action " skip"}}&amp;action=skip{{else if
+				.Upload}}&amp;upload={{.Upload.ID}}{{end}}" {{- if eq .Type "twitch_channel_point_reward" }}
 				class="active" {{- end}}>Channel points</a>
 		</nav>
 		{{- end}}
-		<div class="content form">
+
+		{{- if and (eq .Type "chat_emote") .EmoteTotal}}
+		<form action="/rewards/new" method="get" class="filter" data-emote-filter>
+			<input type="hidden" name="type" value="{{.Type}}">
+			<input type="hidden" name="action" value="{{.Action}}">
+			{{- with .Upload}}
+			<input type="hidden" name="upload" value="{{.ID}}">
+			{{- end}}
+			<div class="tabs">
+				<label {{- if not .EmoteProvider}} class="active" {{- end}}><input type="radio" name="provider" value=""
+						{{- if not .EmoteProvider}} checked{{end}}>all</label>
+				{{- range .EmoteProviders}}
+				<label {{- if eq . $.EmoteProvider}} class="active" {{- end}}><input type="radio" name="provider"
+						value="{{.}}" {{- if eq . $.EmoteProvider}} checked{{end}}>{{.}}</label>
+				{{- end}}
+			</div>
+			<input type="search" name="q" value="{{.EmoteQuery}}" placeholder="search emotes" aria-label="search emotes"
+				autocomplete="off">
+			<button type="submit">filter</button>
+		</form>
+		{{- end}}
+
+		<form action="/rewards/new" method="post" class="content form">
 			<input type="hidden" name="type" value="{{.Type}}">
 			<input type="hidden" name="action" value="{{.Action}}">
 			<input type="hidden" name="upload_id" value="{{with .Upload}}{{.ID}}{{end}}">
 
 			{{- if eq .Type "chat_emote"}}
-			<label for="data">Emote</label>
-			<input type="text" id="data" name="data" value="{{.Data}}" list="emotes" placeholder="emote name"
-				autocomplete="off" required>
-			<datalist id="emotes">
+			{{- if .EmoteTotal}}
+			<div class="choices emotes" data-emotes>
 				{{- range .Emotes}}
-				<option value="{{.Name}}">{{.Provider}}</option>
+				{{- $key := printf "%s:%s" .Provider .ID}}
+				<label class="choice emote" title="{{.Name}} · {{.Provider}}" data-provider="{{.Provider}}"
+					data-name="{{.Name}}">
+					<input type="radio" name="data" value="{{$key}}" required {{- if eq $key $.Data}} checked{{end}}>
+					<img src="{{emote $key}}" alt="" loading="lazy">
+					<span>{{.Name}}</span>
+				</label>
 				{{- end}}
-			</datalist>
+			</div>
+			<p class="hint" data-emotes-empty {{- if .Emotes}} hidden{{end}}>No emotes match the filter.</p>
 			<p class="hint">Any 7TV, BTTV, FFZ or Twitch emote from your channel or the global sets.</p>
+			{{- else}}
+			<p>No emotes are available for your channel.</p>
+			{{- end}}
 			{{- else if eq .Type "twitch_channel_point_reward"}}
 			{{- if not .TwitchEnabled}}
 			<p>Twitch is not configured on this instance.</p>
@@ -105,18 +155,26 @@
 			{{- else if .PointRewardsError}}
 			<p>{{.PointRewardsError}}</p>
 			{{- else if .PointRewards}}
-			<label for="data">Reward</label>
-			<select id="data" name="data" required>
+			<div class="choices">
 				{{- range .PointRewards}}
-				<option value="{{.ID}}" {{- if eq .ID $.Data}} selected{{end}}>{{.Title}} · {{.Cost}}
-					{{- if not .Enabled}} (disabled){{else if .Paused}} (paused){{end}}</option>
+				<label class="choice point">
+					<input type="radio" name="data" value="{{.ID}}" required {{- if eq .ID $.Data}} checked{{end}}>
+					{{- if .Image}}
+					<img src="{{.Image}}" alt="" class="point-reward" style="background-color: {{.Color}}"
+						loading="lazy">
+					{{- end}}
+					<span class="body">
+						<b>{{.Title}}</b>
+						<span class="meta">{{if not .Enabled}}disabled{{else if .Paused}}paused{{else}}enabled{{end}} ·
+							{{.Cost}} points</span>
+					</span>
+				</label>
 				{{- end}}
-			</select>
+			</div>
 			<p class="hint">A custom reward from your Twitch channel. {{if eq .Action "anonupload"}}A random post is
-				shown{{else if eq .Action "twitch_clip"}}A random clip plays{{else if eq
-				.Action "youtube"}}The linked video plays{{else if eq .Action "skip"}}The current reward is
-				skipped{{else}}The sound plays{{end}} every time a
-				viewer redeems it.</p>
+				shown{{else if eq .Action "twitch_clip"}}A random clip plays{{else if eq .Action "youtube"}}The linked
+				video plays{{else if eq .Action "skip"}}The current reward is skipped{{else}}The sound plays{{end}}
+				every time a viewer redeems it.</p>
 			{{- else}}
 			<p>Your channel has no custom channel point rewards yet. Create one in your Twitch creator dashboard, then
 				reload this page.</p>
@@ -129,8 +187,9 @@
 			{{- end}}
 
 			<button type="submit" class="green" {{- if or (and (eq .Action "sound" ) (not .Upload)) (and (eq
-				.Type "twitch_channel_point_reward" ) (not .PointRewards))}} disabled{{end}}>Create</button>
-		</div>
-	</form>
+				.Type "twitch_channel_point_reward" ) (not .PointRewards)) (and (eq .Type "chat_emote" ) (not
+				.EmoteTotal))}} disabled{{end}}>Create</button>
+		</form>
+	</section>
 </article>
 {{end}}

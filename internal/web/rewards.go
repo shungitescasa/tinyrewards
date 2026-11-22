@@ -148,15 +148,7 @@ func (h *Handler) renderReward(c fiber.Ctx, status int, v *account.User, rewardT
 	}
 
 	if rewardType == rewards.TypeChatEmote {
-		var options []emotes.Emote
-		seen := map[string]bool{}
-		for _, e := range h.channelEmotes(ctx, h.twitchID(ctx, v.ID)) {
-			if !seen[e.Name] {
-				seen[e.Name] = true
-				options = append(options, e)
-			}
-		}
-		m["Emotes"] = options
+		emoteFilter(m, h.channelEmotes(ctx, h.twitchID(ctx, v.ID)), c.Query("provider"), c.Query("q"))
 	}
 
 	if rewardType == rewards.TypeTwitchReward {
@@ -164,6 +156,36 @@ func (h *Handler) renderReward(c fiber.Ctx, status int, v *account.User, rewardT
 	}
 
 	return h.render(c, status, "reward", m)
+}
+
+func emoteFilter(m fiber.Map, list []emotes.Emote, provider, query string) {
+	present := map[string]bool{}
+	for _, e := range list {
+		present[e.Provider] = true
+	}
+	var providers []string
+	for _, p := range emotes.Providers {
+		if present[p] {
+			providers = append(providers, p)
+		}
+	}
+	if !present[provider] {
+		provider = ""
+	}
+	query = strings.TrimSpace(query)
+	needle := strings.ToLower(query)
+
+	var shown []emotes.Emote
+	for _, e := range list {
+		if (provider == "" || e.Provider == provider) && strings.Contains(strings.ToLower(e.Name), needle) {
+			shown = append(shown, e)
+		}
+	}
+	m["Emotes"] = shown
+	m["EmoteTotal"] = len(list)
+	m["EmoteProviders"] = providers
+	m["EmoteProvider"] = provider
+	m["EmoteQuery"] = query
 }
 
 func (h *Handler) channelPointRewards(ctx context.Context, userID string, m fiber.Map) {
@@ -205,7 +227,7 @@ func (h *Handler) resolveEmote(ctx context.Context, twitchID, input string) (str
 		return "", nil
 	}
 	for _, e := range h.channelEmotes(ctx, twitchID) {
-		if e.Name == name {
+		if e.Provider+":"+e.ID == name || e.Name == name {
 			return e.Provider + ":" + e.ID, nil
 		}
 	}
