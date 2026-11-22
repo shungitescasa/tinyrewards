@@ -40,6 +40,20 @@ var funcs = template.FuncMap{
 	"date": func(t time.Time) string {
 		return t.Format("2006-01-02")
 	},
+	"dict": func(pairs ...any) (map[string]any, error) {
+		if len(pairs)%2 != 0 {
+			return nil, errors.New("dict: odd number of arguments")
+		}
+		m := make(map[string]any, len(pairs)/2)
+		for i := 0; i < len(pairs); i += 2 {
+			key, ok := pairs[i].(string)
+			if !ok {
+				return nil, fmt.Errorf("dict: key %v is not a string", pairs[i])
+			}
+			m[key] = pairs[i+1]
+		}
+		return m, nil
+	},
 	"emote": func(data string) string {
 		provider, id, _ := strings.Cut(data, ":")
 		return emotes.ImageURL(provider, id)
@@ -71,17 +85,20 @@ func NewHandler(opts Options) *Handler {
 		assets:    map[string]string{},
 	}
 
-	entries, err := fs.ReadDir(files, "static")
-	if err != nil {
-		panic(err)
-	}
-	for _, entry := range entries {
-		content, err := fs.ReadFile(files, "static/"+entry.Name())
+	err := fs.WalkDir(files, "static", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		content, err := fs.ReadFile(files, path)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		sum := sha256.Sum256(content)
-		h.assets[entry.Name()] = "/static/" + entry.Name() + "?v=" + hex.EncodeToString(sum[:6])
+		h.assets[strings.TrimPrefix(path, "static/")] = "/" + path + "?v=" + hex.EncodeToString(sum[:6])
+		return nil
+	})
+	if err != nil {
+		panic(err)
 	}
 
 	for _, name := range pages {

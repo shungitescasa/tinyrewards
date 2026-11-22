@@ -270,6 +270,10 @@ details[open]>summary {
 	box-shadow: var(--shadow);
 }
 
+.sound.box {
+	border: none;
+}
+
 .box .box {
 	border-color: var(--surface-alt);
 	box-shadow: none;
@@ -408,9 +412,70 @@ details[open]>summary {
 	gap: var(--pad);
 }
 
-audio {
-	display: block;
-	width: 100%;
+/** PLAYER */
+.player {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	border: 2px solid var(--surface-alt);
+}
+
+.player>.info {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--pad);
+	padding: var(--pad);
+	background: var(--surface-alt);
+}
+
+.player>.info>.title {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.player>.info>.title>* {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.player>.info>.button {
+	flex-shrink: 0;
+}
+
+.player>.controls {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--pad) / 2);
+	padding: var(--pad);
+	background: var(--surface);
+}
+
+.player button {
+	display: flex;
+	padding: calc(var(--pad) / 2);
+	background: var(--bg);
+	box-shadow: var(--shadow);
+}
+
+.player button img {
+	width: 16px;
+	height: 16px;
+}
+
+.player .time {
+	font-size: .85em;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.player input[type="range"] {
+	flex: 1;
+	min-width: 0;
+	accent-color: var(--fg);
+	cursor: pointer;
 }
 
 .pagination {
@@ -447,9 +512,8 @@ th {
 	font-weight: normal;
 }
 
-td audio {
-	min-width: 200px;
-	margin-top: calc(var(--pad) / 2);
+td .player {
+	min-width: 260px;
 }
 
 td:has(> form) {
@@ -485,26 +549,7 @@ dt {
 	list-style: none;
 }
 
-.track {
-	display: flex;
-	flex-direction: column;
-	gap: calc(var(--pad) / 2);
-}
-
-.track>.info {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: var(--pad);
-}
-
-.track>.info>b {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.picker>.track:not(:last-child) {
+.picker>li:not(:last-child) {
 	padding-bottom: var(--pad);
 	border-bottom: 2px solid var(--surface-alt);
 }

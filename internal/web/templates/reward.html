@@ -42,24 +42,16 @@
 			<p class="hint">Turn on "Require Viewer to Enter Text" for the reward in your Twitch creator dashboard.
 				Only channel point rewards can trigger YouTube videos.</p>
 			{{- else if .Upload}}
-			<div class="track">
-				<div class="info">
-					<b>{{.Upload.Code}}</b>
-					<a href="/rewards/new?type={{.Type}}" class="button">change</a>
-				</div>
-				{{template "audio" .Upload}}
-			</div>
+			{{template "player" dict "Sound" .Upload "Href" (printf "/rewards/new?type=%s" (urlquery .Type)) "Label"
+			"change"}}
 			{{- else}}
 			{{- if .Uploads}}
 			<p class="hint">Your recent uploads</p>
 			<ul class="picker">
 				{{- range .Uploads}}
-				<li class="track">
-					<div class="info">
-						<b>{{.Code}}</b>
-						<a href="/rewards/new?type={{$.Type}}&amp;upload={{.ID}}" class="button">select</a>
-					</div>
-					{{template "audio" .}}
+				<li>
+					{{template "player" dict "Sound" . "Href" (printf "/rewards/new?type=%s&upload=%s" (urlquery $.Type)
+					(urlquery .ID)) "Label" "select"}}
 				</li>
 				{{- end}}
 			</ul>

@@ -1,20 +1,36 @@
-{{define "audio" -}}
-<audio controls preload="none">
-	{{- range .Files}}
-	<source src="{{.URL}}" type="{{.Mime}}">{{end -}}
-</audio>
+{{define "player" -}}
+{{- with .Sound}}
+<div class="player" data-player>
+	<div class="info">
+		<div class="title">
+			<b title="{{.Code}}">{{.Code}}</b>
+			<span class="meta">
+				{{- with .Username}}<a href="/users/{{$.Sound.UserID}}">{{.}}</a>{{else}}anonymous{{end}} · {{date
+				.UploadedAt -}}
+			</span>
+		</div>
+		{{- with $.Href}}
+		<a href="{{.}}" class="button">{{$.Label}}</a>
+		{{- end}}
+	</div>
+	<div class="controls">
+		<audio preload="metadata">
+			{{- range .Files}}
+			<source src="{{.URL}}" type="{{.Mime}}">{{end -}}
+		</audio>
+		<button type="button" title="play" data-toggle data-play="{{asset `img/icons/control_play.png`}}"
+			data-pause="{{asset `img/icons/control_pause.png`}}"><img src="{{asset `img/icons/control_play.png`}}"
+				alt="play"></button>
+		<input type="range" min="0" max="0" step="any" value="0" title="seek" aria-label="seek" data-seek>
+		<span class="time" data-time>0:00 / 0:00</span>
+	</div>
+</div>
+{{- end}}
 {{- end}}
 
 {{define "sound"}}
 <div class="sound box">
-	<div class="tab" title="{{.Code}}">{{.Code}}</div>
-	<div class="content">
-		{{template "audio" .}}
-		<p class="meta">
-			{{- with .Username}}<a href="/users/{{$.UserID}}">{{.}}</a>{{else}}anonymous{{end}} · {{date .UploadedAt -}}
-		</p>
-		<a href="/rewards/new?upload={{.ID}}">use as reward</a>
-	</div>
+	{{template "player" dict "Sound" . "Href" (printf "/rewards/new?upload=%s" .ID) "Label" "use as reward"}}
 </div>
 {{- end}}
 
@@ -51,8 +67,7 @@
 				</td>
 				<td>
 					{{- if .Upload}}
-					{{.Upload.Code}}
-					{{template "audio" .Upload}}
+					{{template "player" dict "Sound" .Upload}}
 					{{- else if eq .Action "anonupload"}}
 					random media from Anonupload
 					{{- else if eq .Action "twitch_clip"}}
