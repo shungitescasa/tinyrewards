@@ -24,7 +24,7 @@
 		<thead>
 			<tr>
 				<th>Trigger</th>
-				<th>Sound</th>
+				<th>Action</th>
 				<th>Added</th>
 				{{- if .Owner}}
 				<th></th>
@@ -50,8 +50,12 @@
 					{{- end}}
 				</td>
 				<td>
+					{{- if .Upload}}
 					{{.Upload.Code}}
 					{{template "audio" .Upload}}
+					{{- else if eq .Action "anonupload"}}
+					random media from Anonupload
+					{{- end}}
 				</td>
 				<td>{{date .CreatedAt}}</td>
 				{{- if $.Owner}}

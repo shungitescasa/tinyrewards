@@ -25,6 +25,13 @@ const (
 var types = []string{TypeChat, TypeChatEmote, TypeTwitchReward}
 
 const (
+	ActionSound      = "sound"
+	ActionAnonupload = "anonupload"
+)
+
+var actions = []string{ActionSound, ActionAnonupload}
+
+const (
 	maxDataLength        = 65535
 	maxEmoteIDLength     = 64
 	maxTwitchRewardIDLen = 64
@@ -46,17 +53,21 @@ var (
 	ErrTwitchDisabled = errors.New("twitch channel point rewards are not enabled on this instance")
 	ErrTwitchNotFound = errors.New("channel point reward is not found in the user's Twitch channel")
 	ErrUploadNotFound = errors.New("upload not found")
+	ErrInvalidAction  = fmt.Errorf("action must be one of: %s", strings.Join(actions, ", "))
+	ErrAnonDisabled   = errors.New("anonupload rewards are not enabled on this instance")
+	ErrAnonType       = errors.New("anonupload rewards can only be triggered by channel point rewards")
 	ErrDuplicate      = errors.New("reward with this type and data already exists")
 	ErrRewardNotFound = errors.New("reward not found")
 )
 
 type Reward struct {
-	ID        string        `json:"id"`
-	UserID    string        `json:"user_id"`
-	Type      string        `json:"type"`
-	Data      string        `json:"data"`
-	Upload    sounds.Upload `json:"upload"`
-	CreatedAt time.Time     `json:"created_at"`
+	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
+	Type      string         `json:"type"`
+	Data      string         `json:"data"`
+	Action    string         `json:"action"`
+	Upload    *sounds.Upload `json:"upload"`
+	CreatedAt time.Time      `json:"created_at"`
 }
 
 func parseType(raw string) (string, error) {
@@ -70,6 +81,19 @@ func parseType(raw string) (string, error) {
 		}
 	}
 	return "", ErrInvalidType
+}
+
+func parseAction(raw string) (string, error) {
+	a := strings.TrimSpace(raw)
+	if a == "" {
+		return ActionSound, nil
+	}
+	for _, known := range actions {
+		if a == known {
+			return a, nil
+		}
+	}
+	return "", ErrInvalidAction
 }
 
 func parseData(rewardType, raw string) (string, error) {
@@ -168,12 +192,23 @@ func (h *Handler) twitchUserID(ctx context.Context, userID string) (string, erro
 	return aliasID, err
 }
 
-func (h *Handler) insert(ctx context.Context, id, userID, rewardType, data, uploadID string) error {
-	res, err := h.opts.DB.ExecContext(ctx,
-		`INSERT INTO rewards (id, user_id, type, data, upload_id)
-		 SELECT ?, ?, ?, ?, id FROM uploads WHERE id = ?`,
-		id, userID, rewardType, data, uploadID,
+func (h *Handler) insert(ctx context.Context, id, userID, rewardType, data, action, uploadID string) error {
+	var (
+		res sql.Result
+		err error
 	)
+	if action == ActionSound {
+		res, err = h.opts.DB.ExecContext(ctx,
+			`INSERT INTO rewards (id, user_id, type, data, action, upload_id)
+			 SELECT ?, ?, ?, ?, ?, id FROM uploads WHERE id = ?`,
+			id, userID, rewardType, data, action, uploadID,
+		)
+	} else {
+		res, err = h.opts.DB.ExecContext(ctx,
+			`INSERT INTO rewards (id, user_id, type, data, action, upload_id) VALUES (?, ?, ?, ?, ?, NULL)`,
+			id, userID, rewardType, data, action,
+		)
+	}
 	if isMySQLError(err, mysqlDuplicateEntry) {
 		return ErrDuplicate
 	}
@@ -209,11 +244,11 @@ func (h *Handler) find(ctx context.Context, baseURL, column, value string) ([]Re
 	items := []Reward{}
 
 	rows, err := h.opts.DB.QueryContext(ctx,
-		`SELECT r.id, r.user_id, r.type, r.data, r.created_at,
+		`SELECT r.id, r.user_id, r.type, r.data, r.action, r.created_at,
 		        u.id, u.code, u.user_id, usr.username, u.uploaded_at,
 		        f.id, f.mime, f.extension, f.size
 		 FROM rewards r
-		 JOIN uploads u ON u.id = r.upload_id
+		 LEFT JOIN uploads u ON u.id = r.upload_id
 		 LEFT JOIN users usr ON usr.id = u.user_id
 		 LEFT JOIN upload_files uf ON uf.upload_id = u.id
 		 LEFT JOIN files f ON f.id = uf.file_id
@@ -228,25 +263,32 @@ func (h *Handler) find(ctx context.Context, baseURL, column, value string) ([]Re
 
 	for rows.Next() {
 		var (
-			r         Reward
-			fileID    *string
-			mime      *string
-			extension *string
-			size      *int64
+			r          Reward
+			upload     sounds.Upload
+			uploadID   *string
+			uploadCode *string
+			uploadedAt *time.Time
+			fileID     *string
+			mime       *string
+			extension  *string
+			size       *int64
 		)
 		if err := rows.Scan(
-			&r.ID, &r.UserID, &r.Type, &r.Data, &r.CreatedAt,
-			&r.Upload.ID, &r.Upload.Code, &r.Upload.UserID, &r.Upload.Username, &r.Upload.UploadedAt,
+			&r.ID, &r.UserID, &r.Type, &r.Data, &r.Action, &r.CreatedAt,
+			&uploadID, &uploadCode, &upload.UserID, &upload.Username, &uploadedAt,
 			&fileID, &mime, &extension, &size,
 		); err != nil {
 			return nil, err
 		}
 		if n := len(items); n == 0 || items[n-1].ID != r.ID {
-			r.Upload.Files = []sounds.File{}
+			if uploadID != nil {
+				upload.ID, upload.Code, upload.UploadedAt = *uploadID, *uploadCode, *uploadedAt
+				upload.Files = []sounds.File{}
+				r.Upload = &upload
+			}
 			items = append(items, r)
 		}
-		if fileID != nil {
-			last := &items[len(items)-1]
+		if last := &items[len(items)-1]; fileID != nil && last.Upload != nil {
 			last.Upload.Files = append(last.Upload.Files, sounds.File{
 				ID:        *fileID,
 				Mime:      *mime,
@@ -260,6 +302,18 @@ func (h *Handler) find(ctx context.Context, baseURL, column, value string) ([]Re
 		return nil, err
 	}
 	return items, nil
+}
+
+func (h *Handler) actionFor(ctx context.Context, userID, rewardType, data string) (string, error) {
+	var action string
+	err := h.opts.DB.QueryRowContext(ctx,
+		`SELECT action FROM rewards WHERE user_id = ? AND type = ? AND data_hash = UNHEX(SHA2(?, 256))`,
+		userID, rewardType, data,
+	).Scan(&action)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return action, err
 }
 
 func (h *Handler) userExists(ctx context.Context, userID string) (bool, error) {

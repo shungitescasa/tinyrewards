@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"git.shungites.casa/tiny/rewards/internal/account"
+	"git.shungites.casa/tiny/rewards/internal/anonupload"
 	"git.shungites.casa/tiny/rewards/internal/emotes"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
 	"git.shungites.casa/tiny/rewards/internal/twitch"
@@ -23,6 +24,7 @@ type Options struct {
 	Emotes       *emotes.Checker
 	Twitch       *twitch.Client
 	EventSub     *twitch.EventSub
+	Anonupload   *anonupload.Client
 	PublicURL    string
 }
 
@@ -36,6 +38,10 @@ func NewHandler(opts Options) *Handler {
 
 func (h *Handler) Register(app fiber.Router) {
 	app.Get("/rewards/events", h.eventsUpgrade, websocket.New(h.Events))
+}
+
+func (h *Handler) AnonuploadEnabled() bool {
+	return h.opts.Anonupload != nil
 }
 
 func (h *Handler) Delete(c fiber.Ctx) error {
@@ -53,7 +59,7 @@ func (h *Handler) Add(c fiber.Ctx) error {
 		return err
 	}
 	r, err := h.Create(c.Context(), sounds.BaseURL(c, h.opts.PublicURL), account.UserID(c),
-		c.FormValue("type"), c.FormValue("data"), c.FormValue("upload_id"))
+		c.FormValue("type"), c.FormValue("data"), c.FormValue("action"), c.FormValue("upload_id"))
 	if err != nil {
 		return err
 	}
@@ -71,7 +77,7 @@ func (h *Handler) Mine(c fiber.Ctx) error {
 	return c.JSON(items)
 }
 
-func (h *Handler) Create(ctx context.Context, baseURL, userID, rawType, rawData, rawUploadID string) (Reward, error) {
+func (h *Handler) Create(ctx context.Context, baseURL, userID, rawType, rawData, rawAction, rawUploadID string) (Reward, error) {
 	rewardType, err := parseType(rawType)
 	if err != nil {
 		return Reward{}, fiber.NewError(fiber.StatusBadRequest, err.Error())
@@ -80,9 +86,18 @@ func (h *Handler) Create(ctx context.Context, baseURL, userID, rawType, rawData,
 	if err != nil {
 		return Reward{}, fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
+	action, err := parseAction(rawAction)
+	if err != nil {
+		return Reward{}, fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
 	uploadID := strings.TrimSpace(rawUploadID)
-	if uploadID == "" {
+	switch {
+	case action == ActionSound && uploadID == "":
 		return Reward{}, fiber.NewError(fiber.StatusBadRequest, `missing "upload_id" field`)
+	case action == ActionAnonupload && !h.AnonuploadEnabled():
+		return Reward{}, fiber.NewError(fiber.StatusUnprocessableEntity, ErrAnonDisabled.Error())
+	case action == ActionAnonupload && rewardType != TypeTwitchReward:
+		return Reward{}, fiber.NewError(fiber.StatusBadRequest, ErrAnonType.Error())
 	}
 
 	switch rewardType {
@@ -110,7 +125,7 @@ func (h *Handler) Create(ctx context.Context, baseURL, userID, rawType, rawData,
 	}
 
 	id := rand.Text()
-	err = h.insert(ctx, id, userID, rewardType, data, uploadID)
+	err = h.insert(ctx, id, userID, rewardType, data, action, uploadID)
 	switch {
 	case errors.Is(err, ErrUploadNotFound):
 		return Reward{}, fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())

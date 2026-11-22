@@ -63,7 +63,7 @@ func (h *Handler) rewardPage(c fiber.Ctx) error {
 	if v == nil {
 		return toLogin(c)
 	}
-	return h.renderReward(c, fiber.StatusOK, v, c.Query("type"), c.Query("upload"), "", "")
+	return h.renderReward(c, fiber.StatusOK, v, c.Query("type"), c.Query("action"), c.Query("upload"), "", "")
 }
 
 func (h *Handler) createReward(c fiber.Ctx) error {
@@ -72,17 +72,17 @@ func (h *Handler) createReward(c fiber.Ctx) error {
 		return toLogin(c)
 	}
 	ctx := c.Context()
-	rewardType, uploadID, input := c.FormValue("type"), c.FormValue("upload_id"), c.FormValue("data")
+	rewardType, action, uploadID, input := c.FormValue("type"), c.FormValue("action"), c.FormValue("upload_id"), c.FormValue("data")
 
 	data, err := input, error(nil)
 	if rewardType == rewards.TypeChatEmote {
 		data, err = h.resolveEmote(ctx, h.twitchID(ctx, v.ID), input)
 	}
 	if err == nil {
-		_, err = h.opts.Rewards.Create(ctx, h.baseURL(c), v.ID, rewardType, data, uploadID)
+		_, err = h.opts.Rewards.Create(ctx, h.baseURL(c), v.ID, rewardType, data, action, uploadID)
 	}
 	if status, message, ok := userError(err); ok {
-		return h.renderReward(c, status, v, rewardType, uploadID, input, message)
+		return h.renderReward(c, status, v, rewardType, action, uploadID, input, message)
 	}
 	if err != nil {
 		return err
@@ -105,17 +105,23 @@ func (h *Handler) deleteReward(c fiber.Ctx) error {
 	return c.Redirect().With("success", "Reward deleted.").To("/rewards")
 }
 
-func (h *Handler) renderReward(c fiber.Ctx, status int, v *account.User, rewardType, uploadID, data, message string) error {
+func (h *Handler) renderReward(c fiber.Ctx, status int, v *account.User, rewardType, action, uploadID, data, message string) error {
 	ctx, baseURL := c.Context(), h.baseURL(c)
-	switch rewardType {
-	case rewards.TypeChatEmote, rewards.TypeTwitchReward:
+	anonupload := h.opts.Rewards.AnonuploadEnabled()
+	if action != rewards.ActionAnonupload || !anonupload {
+		action = rewards.ActionSound
+	}
+	switch {
+	case action == rewards.ActionAnonupload:
+		rewardType = rewards.TypeTwitchReward
+	case rewardType == rewards.TypeChatEmote, rewardType == rewards.TypeTwitchReward:
 	default:
 		rewardType = rewards.TypeChat
 	}
-	m := fiber.Map{"Type": rewardType, "Data": data, "Error": message}
+	m := fiber.Map{"Type": rewardType, "Action": action, "Anonupload": anonupload, "Data": data, "Error": message}
 
 	var upload *sounds.Upload
-	if uploadID != "" {
+	if action == rewards.ActionSound && uploadID != "" {
 		u, err := h.opts.Sounds.Get(ctx, baseURL, uploadID)
 		_, msg, ok := userError(err)
 		switch {
@@ -129,7 +135,7 @@ func (h *Handler) renderReward(c fiber.Ctx, status int, v *account.User, rewardT
 	}
 	m["Upload"] = upload
 
-	if upload == nil {
+	if action == rewards.ActionSound && upload == nil {
 		uploads, _, err := h.opts.Sounds.Find(ctx, baseURL, sounds.Query{Sort: sounds.SortRecent, Page: 1, Limit: recentUploads, UserID: v.ID})
 		if err != nil {
 			return err

@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"git.shungites.casa/tiny/rewards/internal/account"
+	"git.shungites.casa/tiny/rewards/internal/anonupload"
 	"git.shungites.casa/tiny/rewards/internal/config"
 	"git.shungites.casa/tiny/rewards/internal/database"
 	"git.shungites.casa/tiny/rewards/internal/emotes"
@@ -27,7 +28,6 @@ const (
 	multipartOverhead = 1 << 20
 	dbStartupTimeout  = 30 * time.Second
 	s3StartupTimeout  = 30 * time.Second
-	apiPrefix         = "/api"
 )
 
 func main() {
@@ -110,6 +110,13 @@ func main() {
 		Authenticate:     accounts.OptionalAuthenticate,
 	})
 
+	var anonClient *anonupload.Client
+	if cfg.Anonupload.Enabled() {
+		anonClient = anonupload.New(cfg.Anonupload.URL)
+	} else {
+		log.Print("anonupload: url is not set, random media rewards are disabled")
+	}
+
 	emoteChecker := emotes.NewChecker(cfg.Emotes.Providers, twitchCredentials)
 
 	rewardHandler := rewards.NewHandler(rewards.Options{
@@ -118,6 +125,7 @@ func main() {
 		Emotes:       emoteChecker,
 		Twitch:       twitchClient,
 		EventSub:     eventSub,
+		Anonupload:   anonClient,
 		PublicURL:    cfg.Server.PublicURL,
 	})
 
@@ -142,7 +150,7 @@ func main() {
 		BodyLimit: int(cfg.Files.MaxSize + multipartOverhead),
 		ErrorHandler: func(c fiber.Ctx, err error) error {
 			if middleware.WantsHTML(c) {
-			return pages.Error(c, err)
+				return pages.Error(c, err)
 			}
 			return middleware.WriteError(c, err)
 		},

@@ -71,6 +71,14 @@ type Emotes struct {
 	Providers []string
 }
 
+type Anonupload struct {
+	URL string
+}
+
+func (a Anonupload) Enabled() bool {
+	return a.URL != ""
+}
+
 type Auth struct {
 	Secret   string
 	TokenTTL time.Duration
@@ -83,8 +91,9 @@ type Config struct {
 	Sounds   Sounds
 	S3       S3
 	Twitch   Twitch
-	Emotes   Emotes
-	Auth     Auth
+	Emotes     Emotes
+	Anonupload Anonupload
+	Auth       Auth
 }
 
 func Default() Config {
@@ -216,6 +225,8 @@ func Load(path string, required bool) (Config, error) {
 		cfg.Emotes.Providers = append(cfg.Emotes.Providers, emotes.ProviderTwitch)
 	}
 
+	cfg.Anonupload.URL = strings.TrimRight(strings.TrimSpace(file.Section("anonupload").Key("url").MustString(cfg.Anonupload.URL)), "/")
+
 	auth := file.Section("auth")
 	cfg.Auth.Secret = auth.Key("secret").MustString(cfg.Auth.Secret)
 	if key := auth.Key("token_ttl"); key.String() != "" {
@@ -257,6 +268,16 @@ func (c Config) validate() error {
 		}
 		if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			return fmt.Errorf("server.public_url must be an absolute http(s) URL, got %q", c.Server.PublicURL)
+		}
+	}
+
+	if c.Anonupload.URL != "" {
+		u, err := url.Parse(c.Anonupload.URL)
+		if err != nil {
+			return fmt.Errorf("anonupload.url: %w", err)
+		}
+		if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("anonupload.url must be an absolute http(s) URL, got %q", c.Anonupload.URL)
 		}
 	}
 

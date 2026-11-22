@@ -5,15 +5,27 @@
 	<h1>New reward</h1>
 
 	<section class="box">
+		{{- if .Anonupload}}
+		<nav class="tabs">
+			<a href="/rewards/new?type={{.Type}}" {{- if eq .Action "sound" }} class="active" {{- end}}>Sound</a>
+			<a href="/rewards/new?action=anonupload" {{- if eq .Action "anonupload" }} class="active" {{- end}}>Random
+				media</a>
+		</nav>
+		{{- else}}
 		<div class="tab">Sound</div>
+		{{- end}}
 		<div class="content">
-			{{- with .Upload}}
+			{{- if eq .Action "anonupload"}}
+			<p>A random post from Anonupload. Audio and video play to the end, images stay on screen for a few seconds.
+			</p>
+			<p class="hint">Only channel point rewards can trigger random media.</p>
+			{{- else if .Upload}}
 			<div class="track">
 				<div class="info">
-					<b>{{.Code}}</b>
-					<a href="/rewards/new?type={{$.Type}}" class="button">change</a>
+					<b>{{.Upload.Code}}</b>
+					<a href="/rewards/new?type={{.Type}}" class="button">change</a>
 				</div>
-				{{template "audio" .}}
+				{{template "audio" .Upload}}
 			</div>
 			{{- else}}
 			{{- if .Uploads}}
@@ -39,6 +51,9 @@
 	</section>
 
 	<form action="/rewards/new" method="post" class="box">
+		{{- if eq .Action "anonupload"}}
+		<div class="tab">Channel points</div>
+		{{- else}}
 		<nav class="tabs">
 			<a href="/rewards/new?type=chat{{with .Upload}}&amp;upload={{.ID}}{{end}}" {{- if eq .Type "chat" }}
 				class="active" {{- end}}>Chat message</a>
@@ -47,8 +62,10 @@
 			<a href="/rewards/new?type=twitch_channel_point_reward{{with .Upload}}&amp;upload={{.ID}}{{end}}" {{- if eq
 				.Type "twitch_channel_point_reward" }} class="active" {{- end}}>Channel points</a>
 		</nav>
+		{{- end}}
 		<div class="content form">
 			<input type="hidden" name="type" value="{{.Type}}">
+			<input type="hidden" name="action" value="{{.Action}}">
 			<input type="hidden" name="upload_id" value="{{with .Upload}}{{.ID}}{{end}}">
 
 			{{- if eq .Type "chat_emote"}}
@@ -66,7 +83,8 @@
 			<p>Twitch is not configured on this instance.</p>
 			{{- else if .PointRewardsLogin}}
 			<p>TinyRewards needs access to your channel point rewards.
-				<a href="/account/login/twitch">Log in with Twitch again</a> to grant it.</p>
+				<a href="/account/login/twitch">Log in with Twitch again</a> to grant it.
+			</p>
 			{{- else if .PointRewardsError}}
 			<p>{{.PointRewardsError}}</p>
 			{{- else if .PointRewards}}
@@ -77,7 +95,8 @@
 					{{- if not .Enabled}} (disabled){{else if .Paused}} (paused){{end}}</option>
 				{{- end}}
 			</select>
-			<p class="hint">A custom reward from your Twitch channel. The sound plays every time a viewer redeems it.</p>
+			<p class="hint">A custom reward from your Twitch channel. {{if eq .Action "anonupload"}}A random post is
+				shown{{else}}The sound plays{{end}} every time a viewer redeems it.</p>
 			{{- else}}
 			<p>Your channel has no custom channel point rewards yet. Create one in your Twitch creator dashboard, then
 				reload this page.</p>
@@ -89,8 +108,8 @@
 			<p class="hint">A case-insensitive JavaScript regular expression, tested against every chat message.</p>
 			{{- end}}
 
-			<button type="submit" class="green" {{- if or (not .Upload) (and (eq .Type "twitch_channel_point_reward")
-				(not .PointRewards))}} disabled{{end}}>Create</button>
+			<button type="submit" class="green" {{- if or (and (eq .Action "sound" ) (not .Upload)) (and (eq
+				.Type "twitch_channel_point_reward" ) (not .PointRewards))}} disabled{{end}}>Create</button>
 		</div>
 	</form>
 </article>
