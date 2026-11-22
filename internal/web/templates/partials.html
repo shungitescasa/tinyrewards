@@ -38,6 +38,13 @@
 					{{- if eq .Type "chat_emote"}}
 					{{- $name := or (index $.EmoteNames .Data) .Data}}
 					<img src="{{emote .Data}}" alt="{{$name}}" title="{{$name}}" class="emote"> {{$name}}
+					{{- else if eq .Type "twitch_channel_point_reward"}}
+					{{- with index $.PointRewards .Data}}
+					<img src="{{.Image}}" alt="" class="point-reward" style="background-color: {{.Color}}"> {{.Title}}
+					<span class="meta">{{.Cost}}</span>
+					{{- else}}
+					channel points <code>{{.Data}}</code>
+					{{- end}}
 					{{- else}}
 					<code>{{.Data}}</code>
 					{{- end}}

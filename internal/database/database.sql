@@ -59,3 +59,14 @@ CREATE TABLE IF NOT EXISTS rewards (
     CONSTRAINT rewards_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT rewards_upload FOREIGN KEY (upload_id) REFERENCES uploads (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS twitch_tokens (
+    user_id CHAR(32) CHARACTER SET ascii NOT NULL,
+    twitch_id VARCHAR(255) NOT NULL,
+    access_token VARCHAR(255) CHARACTER SET ascii NOT NULL,
+    refresh_token VARCHAR(255) CHARACTER SET ascii NOT NULL,
+    scopes VARCHAR(1024) CHARACTER SET ascii NOT NULL,
+    expires_at TIMESTAMP NULL,
+    PRIMARY KEY (user_id),
+    CONSTRAINT twitch_tokens_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

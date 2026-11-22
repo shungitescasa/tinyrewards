@@ -2,7 +2,9 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"slices"
 	"strconv"
@@ -14,6 +16,7 @@ import (
 	"git.shungites.casa/tiny/rewards/internal/emotes"
 	"git.shungites.casa/tiny/rewards/internal/rewards"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
+	"git.shungites.casa/tiny/rewards/internal/twitch"
 )
 
 const recentUploads = 5
@@ -45,12 +48,13 @@ func (h *Handler) rewardList(c fiber.Ctx) error {
 	}
 
 	return h.render(c, fiber.StatusOK, "rewards", fiber.Map{
-		"Rewards":    items,
-		"EmoteNames": h.emoteNames(ctx, h.twitchID(ctx, v.ID), items),
-		"Owner":      true,
-		"WidgetURL":  widget,
-		"Every":      every,
-		"Delay":      delay,
+		"Rewards":      items,
+		"EmoteNames":   h.emoteNames(ctx, h.twitchID(ctx, v.ID), items),
+		"PointRewards": h.pointRewards(ctx, v.ID, items),
+		"Owner":        true,
+		"WidgetURL":    widget,
+		"Every":        every,
+		"Delay":        delay,
 	})
 }
 
@@ -103,7 +107,9 @@ func (h *Handler) deleteReward(c fiber.Ctx) error {
 
 func (h *Handler) renderReward(c fiber.Ctx, status int, v *account.User, rewardType, uploadID, data, message string) error {
 	ctx, baseURL := c.Context(), h.baseURL(c)
-	if rewardType != rewards.TypeChatEmote {
+	switch rewardType {
+	case rewards.TypeChatEmote, rewards.TypeTwitchReward:
+	default:
 		rewardType = rewards.TypeChat
 	}
 	m := fiber.Map{"Type": rewardType, "Data": data, "Error": message}
@@ -143,7 +149,44 @@ func (h *Handler) renderReward(c fiber.Ctx, status int, v *account.User, rewardT
 		m["Emotes"] = options
 	}
 
+	if rewardType == rewards.TypeTwitchReward {
+		h.channelPointRewards(ctx, v.ID, m)
+	}
+
 	return h.render(c, status, "reward", m)
+}
+
+func (h *Handler) channelPointRewards(ctx context.Context, userID string, m fiber.Map) {
+	m["TwitchEnabled"] = h.opts.Twitch != nil
+	if h.opts.Twitch == nil {
+		return
+	}
+	list, err := h.opts.Twitch.Rewards(ctx, userID)
+	switch {
+	case errors.Is(err, twitch.ErrNotAuthorized):
+		m["PointRewardsLogin"] = true
+	case errors.Is(err, twitch.ErrNotAffiliate):
+		m["PointRewardsError"] = "Channel points are only available to Twitch partners and affiliates."
+	case err != nil:
+		log.Printf("web: loading channel point rewards: %v", err)
+		m["PointRewardsError"] = "Could not load your channel point rewards from Twitch, try again later."
+	}
+	m["PointRewards"] = list
+}
+
+func (h *Handler) pointRewards(ctx context.Context, userID string, items []rewards.Reward) map[string]*twitch.Reward {
+	found := map[string]*twitch.Reward{}
+	if h.opts.Twitch == nil || !slices.ContainsFunc(items, func(r rewards.Reward) bool { return r.Type == rewards.TypeTwitchReward }) {
+		return found
+	}
+	list, err := h.opts.Twitch.CachedRewards(ctx, userID)
+	if err != nil && !errors.Is(err, twitch.ErrNotAuthorized) && !errors.Is(err, twitch.ErrNotAffiliate) {
+		log.Printf("web: loading channel point rewards: %v", err)
+	}
+	for i := range list {
+		found[list[i].ID] = &list[i]
+	}
+	return found
 }
 
 func (h *Handler) resolveEmote(ctx context.Context, twitchID, input string) (string, error) {

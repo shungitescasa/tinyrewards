@@ -9,17 +9,21 @@ import (
 	"log"
 	"strings"
 
+	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 
 	"git.shungites.casa/tiny/rewards/internal/account"
 	"git.shungites.casa/tiny/rewards/internal/emotes"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
+	"git.shungites.casa/tiny/rewards/internal/twitch"
 )
 
 type Options struct {
 	DB           *sql.DB
 	Authenticate fiber.Handler
 	Emotes       *emotes.Checker
+	Twitch       *twitch.Client
+	EventSub     *twitch.EventSub
 	PublicURL    string
 }
 
@@ -33,6 +37,7 @@ func NewHandler(opts Options) *Handler {
 
 func (h *Handler) Register(api fiber.Router) {
 	api.Post("/rewards/add", h.opts.Authenticate, h.Add)
+	api.Get("/rewards/events", h.eventsUpgrade, websocket.New(h.Events))
 	api.Get("/rewards/:user_id", h.List)
 	api.Delete("/rewards/:id", h.opts.Authenticate, h.Delete)
 }
@@ -89,7 +94,8 @@ func (h *Handler) Create(ctx context.Context, baseURL, userID, rawType, rawData,
 		return Reward{}, fiber.NewError(fiber.StatusBadRequest, `missing "upload_id" field`)
 	}
 
-	if rewardType == TypeChatEmote {
+	switch rewardType {
+	case TypeChatEmote:
 		err := h.verifyEmote(ctx, userID, data)
 		switch {
 		case errors.Is(err, ErrEmoteNotFound):
@@ -98,6 +104,16 @@ func (h *Handler) Create(ctx context.Context, baseURL, userID, rawType, rawData,
 			return Reward{}, fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
 		case err != nil:
 			log.Printf("rewards: verifying emote %s: %v", data, err)
+			return Reward{}, fiber.ErrBadGateway
+		}
+	case TypeTwitchReward:
+		err := h.verifyTwitchReward(ctx, userID, data)
+		switch {
+		case errors.Is(err, ErrTwitchNotFound), errors.Is(err, ErrTwitchDisabled),
+			errors.Is(err, twitch.ErrNotAuthorized), errors.Is(err, twitch.ErrNotAffiliate):
+			return Reward{}, fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
+		case err != nil:
+			log.Printf("rewards: verifying channel point reward %s: %v", data, err)
 			return Reward{}, fiber.ErrBadGateway
 		}
 	}

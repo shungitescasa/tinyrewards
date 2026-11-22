@@ -17,15 +17,17 @@ import (
 )
 
 const (
-	TypeChat      = "chat"
-	TypeChatEmote = "chat_emote"
+	TypeChat         = "chat"
+	TypeChatEmote    = "chat_emote"
+	TypeTwitchReward = "twitch_channel_point_reward"
 )
 
-var types = []string{TypeChat, TypeChatEmote}
+var types = []string{TypeChat, TypeChatEmote, TypeTwitchReward}
 
 const (
 	maxDataLength        = 65535
 	maxEmoteIDLength     = 64
+	maxTwitchRewardIDLen = 64
 	mysqlDuplicateEntry  = 1062
 	mysqlNoReferencedRow = 1452
 	columnID             = "r.id"
@@ -40,6 +42,9 @@ var (
 	ErrDataTooLong    = fmt.Errorf("data exceeds %d bytes", maxDataLength)
 	ErrInvalidEmote   = fmt.Errorf("emote must be in the form <provider>:<emote_id>, where provider is one of: %s", strings.Join(emotes.Providers, ", "))
 	ErrEmoteNotFound  = errors.New("emote is not available in the user's channel or globally")
+	ErrInvalidTwitch  = errors.New("channel point reward ID is not valid")
+	ErrTwitchDisabled = errors.New("twitch channel point rewards are not enabled on this instance")
+	ErrTwitchNotFound = errors.New("channel point reward is not found in the user's Twitch channel")
 	ErrUploadNotFound = errors.New("upload not found")
 	ErrDuplicate      = errors.New("reward with this type and data already exists")
 	ErrRewardNotFound = errors.New("reward not found")
@@ -77,12 +82,17 @@ func parseData(rewardType, raw string) (string, error) {
 	case len(data) > maxDataLength:
 		return "", ErrDataTooLong
 	}
-	if rewardType == TypeChatEmote {
+	switch rewardType {
+	case TypeChatEmote:
 		provider, id, err := parseEmote(data)
 		if err != nil {
 			return "", err
 		}
 		return provider + ":" + id, nil
+	case TypeTwitchReward:
+		if len(data) > maxTwitchRewardIDLen || !isID(data) {
+			return "", ErrInvalidTwitch
+		}
 	}
 	return data, nil
 }
@@ -95,15 +105,22 @@ func parseEmote(data string) (string, string, error) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	id = strings.TrimSpace(id)
 
-	if !emotes.IsProvider(provider) || id == "" || len(id) > maxEmoteIDLength {
+	if !emotes.IsProvider(provider) || len(id) > maxEmoteIDLength || !isID(id) {
 		return "", "", ErrInvalidEmote
 	}
-	for _, r := range id {
+	return provider, id, nil
+}
+
+func isID(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
 		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
-			return "", "", ErrInvalidEmote
+			return false
 		}
 	}
-	return provider, id, nil
+	return true
 }
 
 func (h *Handler) verifyEmote(ctx context.Context, userID, data string) error {
@@ -121,6 +138,20 @@ func (h *Handler) verifyEmote(ctx context.Context, userID, data string) error {
 	}
 	if !ok {
 		return ErrEmoteNotFound
+	}
+	return nil
+}
+
+func (h *Handler) verifyTwitchReward(ctx context.Context, userID, rewardID string) error {
+	if h.opts.Twitch == nil {
+		return ErrTwitchDisabled
+	}
+	ok, err := h.opts.Twitch.HasReward(ctx, userID, rewardID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrTwitchNotFound
 	}
 	return nil
 }

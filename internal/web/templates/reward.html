@@ -44,6 +44,8 @@
 				class="active" {{- end}}>Chat message</a>
 			<a href="/rewards/new?type=chat_emote{{with .Upload}}&amp;upload={{.ID}}{{end}}" {{- if eq
 				.Type "chat_emote" }} class="active" {{- end}}>Emote</a>
+			<a href="/rewards/new?type=twitch_channel_point_reward{{with .Upload}}&amp;upload={{.ID}}{{end}}" {{- if eq
+				.Type "twitch_channel_point_reward" }} class="active" {{- end}}>Channel points</a>
 		</nav>
 		<div class="content form">
 			<input type="hidden" name="type" value="{{.Type}}">
@@ -59,6 +61,27 @@
 				{{- end}}
 			</datalist>
 			<p class="hint">Any 7TV, BTTV, FFZ or Twitch emote from your channel or the global sets.</p>
+			{{- else if eq .Type "twitch_channel_point_reward"}}
+			{{- if not .TwitchEnabled}}
+			<p>Twitch is not configured on this instance.</p>
+			{{- else if .PointRewardsLogin}}
+			<p>TinyRewards needs access to your channel point rewards.
+				<a href="/account/login/twitch">Log in with Twitch again</a> to grant it.</p>
+			{{- else if .PointRewardsError}}
+			<p>{{.PointRewardsError}}</p>
+			{{- else if .PointRewards}}
+			<label for="data">Reward</label>
+			<select id="data" name="data" required>
+				{{- range .PointRewards}}
+				<option value="{{.ID}}" {{- if eq .ID $.Data}} selected{{end}}>{{.Title}} · {{.Cost}}
+					{{- if not .Enabled}} (disabled){{else if .Paused}} (paused){{end}}</option>
+				{{- end}}
+			</select>
+			<p class="hint">A custom reward from your Twitch channel. The sound plays every time a viewer redeems it.</p>
+			{{- else}}
+			<p>Your channel has no custom channel point rewards yet. Create one in your Twitch creator dashboard, then
+				reload this page.</p>
+			{{- end}}
 			{{- else}}
 			<label for="data">Pattern</label>
 			<input type="text" id="data" name="data" value="{{.Data}}" placeholder="^!hello\b" autocomplete="off"
@@ -66,7 +89,8 @@
 			<p class="hint">A case-insensitive JavaScript regular expression, tested against every chat message.</p>
 			{{- end}}
 
-			<button type="submit" class="green" {{- if not .Upload}} disabled{{end}}>Create</button>
+			<button type="submit" class="green" {{- if or (not .Upload) (and (eq .Type "twitch_channel_point_reward")
+				(not .PointRewards))}} disabled{{end}}>Create</button>
 		</div>
 	</form>
 </article>

@@ -18,6 +18,7 @@ import (
 	"git.shungites.casa/tiny/rewards/internal/rewards"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
 	"git.shungites.casa/tiny/rewards/internal/storage"
+	"git.shungites.casa/tiny/rewards/internal/twitch"
 	"git.shungites.casa/tiny/rewards/internal/web"
 	"git.shungites.casa/tiny/rewards/internal/widget"
 )
@@ -58,20 +59,30 @@ func main() {
 		log.Fatalf("storage: %v", err)
 	}
 
-	var twitch *account.TwitchOptions
+	var twitchLogin *account.TwitchOptions
 	var twitchCredentials *emotes.TwitchCredentials
+	var twitchClient *twitch.Client
+	var eventSub *twitch.EventSub
 	if cfg.Twitch.Enabled() {
 		twitchCredentials = &emotes.TwitchCredentials{
 			ClientID:     cfg.Twitch.ClientID,
 			ClientSecret: cfg.Twitch.ClientSecret,
 		}
-		twitch = &account.TwitchOptions{
+		twitchClient = twitch.NewClient(twitch.Options{
+			DB:           db,
+			ClientID:     cfg.Twitch.ClientID,
+			ClientSecret: cfg.Twitch.ClientSecret,
+		})
+		eventSub = twitch.NewEventSub(twitchClient)
+		twitchLogin = &account.TwitchOptions{
 			ClientID:     cfg.Twitch.ClientID,
 			ClientSecret: cfg.Twitch.ClientSecret,
 			RedirectURL:  cfg.Twitch.RedirectURL,
+			Scopes:       []string{twitch.ScopeReadRedemptions},
+			Tokens:       twitchClient,
 		}
 	} else {
-		log.Print("twitch: client_id is not set, twitch login and twitch emote rewards are disabled")
+		log.Print("twitch: client_id is not set, twitch login, twitch emote rewards and channel point rewards are disabled")
 	}
 	log.Printf("emotes: enabled providers: %s", strings.Join(cfg.Emotes.Providers, ", "))
 	secret := []byte(cfg.Auth.Secret)
@@ -82,7 +93,7 @@ func main() {
 	}
 	accounts := account.NewHandler(account.Options{
 		DB:          db,
-		Twitch:      twitch,
+		Twitch:      twitchLogin,
 		TokenSecret: secret,
 		TokenTTL:    cfg.Auth.TokenTTL,
 	})
@@ -105,6 +116,8 @@ func main() {
 		DB:           db,
 		Authenticate: accounts.Authenticate,
 		Emotes:       emoteChecker,
+		Twitch:       twitchClient,
+		EventSub:     eventSub,
 		PublicURL:    cfg.Server.PublicURL,
 	})
 
@@ -118,6 +131,7 @@ func main() {
 		Sounds:           soundHandler,
 		Rewards:          rewardHandler,
 		Emotes:           emoteChecker,
+		Twitch:           twitchClient,
 		PublicURL:        cfg.Server.PublicURL,
 		MaxSize:          cfg.Files.MaxSize,
 		MaxDuration:      cfg.Files.MaxDuration,

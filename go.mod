@@ -3,7 +3,9 @@ module git.shungites.casa/tiny/rewards
 go 1.27.4
 
 require (
+	github.com/fasthttp/websocket v1.5.12
 	github.com/go-sql-driver/mysql v1.10.2
+	github.com/gofiber/contrib/v3/websocket v1.2.2
 	github.com/gofiber/fiber/v3 v3.7.0
 	github.com/minio/minio-go/v7 v7.4.1
 	golang.org/x/oauth2 v0.37.0
@@ -27,6 +29,7 @@ require (
 	github.com/molecule-man/go-brrr v1.3.1 // indirect
 	github.com/philhofer/fwd v1.2.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
+	github.com/savsgio/gotils v0.0.0-20250924091648-bce9a52d7761 // indirect
 	github.com/tinylib/msgp v1.6.5 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.78.0 // indirect

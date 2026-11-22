@@ -25,6 +25,7 @@ import (
 	"git.shungites.casa/tiny/rewards/internal/emotes"
 	"git.shungites.casa/tiny/rewards/internal/rewards"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
+	"git.shungites.casa/tiny/rewards/internal/twitch"
 )
 
 //go:embed templates static
@@ -49,6 +50,7 @@ type Options struct {
 	Sounds           *sounds.Handler
 	Rewards          *rewards.Handler
 	Emotes           *emotes.Checker
+	Twitch           *twitch.Client
 	PublicURL        string
 	MaxSize          int64
 	MaxDuration      time.Duration

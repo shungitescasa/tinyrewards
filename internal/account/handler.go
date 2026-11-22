@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"database/sql"
@@ -21,10 +22,16 @@ const (
 	twitchTimeout     = 15 * time.Second
 )
 
+type TokenStore interface {
+	SaveToken(ctx context.Context, userID, twitchID string, token *oauth2.Token) error
+}
+
 type TwitchOptions struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
+	Scopes       []string
+	Tokens       TokenStore
 }
 
 type Options struct {
@@ -38,6 +45,7 @@ type Handler struct {
 	db           *sql.DB
 	tokens       *tokens
 	twitch       *oauth2.Config
+	twitchTokens TokenStore
 	secureCookie bool
 	client       *http.Client
 }
@@ -53,8 +61,10 @@ func NewHandler(opts Options) *Handler {
 			ClientID:     opts.Twitch.ClientID,
 			ClientSecret: opts.Twitch.ClientSecret,
 			RedirectURL:  opts.Twitch.RedirectURL,
+			Scopes:       opts.Twitch.Scopes,
 			Endpoint:     twitch.Endpoint,
 		}
+		h.twitchTokens = opts.Twitch.Tokens
 		if u, err := url.Parse(opts.Twitch.RedirectURL); err == nil {
 			h.secureCookie = u.Scheme == "https"
 		}
@@ -97,7 +107,7 @@ func (h *Handler) LoginTwitch(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid or expired oauth state")
 	}
 
-	tw, err := h.fetchTwitchUser(c.Context(), code)
+	tw, twitchToken, err := h.fetchTwitchUser(c.Context(), code)
 	if err != nil {
 		var re *oauth2.RetrieveError
 		if errors.As(err, &re) {
@@ -114,6 +124,13 @@ func (h *Handler) LoginTwitch(c fiber.Ctx) error {
 		}
 		log.Printf("account: twitch login: %v", err)
 		return fiber.ErrInternalServerError
+	}
+
+	if h.twitchTokens != nil {
+		if err := h.twitchTokens.SaveToken(c.Context(), u.ID, tw.ID, twitchToken); err != nil {
+			log.Printf("account: saving twitch token: %v", err)
+			return fiber.ErrInternalServerError
+		}
 	}
 
 	token, expires, err := h.tokens.issue(u.ID, time.Now())

@@ -41,6 +41,7 @@
 			const MAX_BACKOFF = 30000;
 			const MAX_NOTIFICATIONS = 8;
 			const READY_HOLD = 3000;
+			const EVENTS_TIMEOUT = 75000;
 
 			const params = new URLSearchParams(location.search);
 			const emoteMode = params.get('emote_mode') === 'every' ? 'every' : 'once';
@@ -231,6 +232,72 @@
 				open();
 			}
 
+			function listen(onConnected, onRedemption) {
+				const url = new URL(root + '/api/rewards/events', location.href);
+				url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+				url.searchParams.set('user_id', userId);
+				let attempts = 0;
+
+				const open = () => {
+					notify('Connecting to channel points...');
+					const ws = new WebSocket(url);
+					let lastSeen = Date.now();
+					let dropped = false;
+
+					const drop = () => {
+						if (dropped) return;
+						dropped = true;
+						clearInterval(watchdog);
+						ws.close();
+						const wait = backoff(attempts++);
+						notify('Disconnected from channel points, reconnecting in ' + wait / 1000 + 's');
+						setTimeout(open, wait);
+					};
+
+					const watchdog = setInterval(() => {
+						if (Date.now() - lastSeen > EVENTS_TIMEOUT) drop();
+					}, EVENTS_TIMEOUT / 3);
+
+					ws.onmessage = event => {
+						lastSeen = Date.now();
+						let msg;
+						try {
+							msg = JSON.parse(event.data);
+						} catch (err) {
+							console.error('invalid event', event.data, err);
+							return;
+						}
+						switch (msg.type) {
+							case 'connected':
+								attempts = 0;
+								notify('Listening to channel points');
+								onConnected();
+								break;
+							case 'error':
+								notify('Channel points: ' + msg.message);
+								break;
+							case 'redemption':
+								onRedemption(msg.redemption);
+								break;
+						}
+					};
+
+					ws.onclose = drop;
+					ws.onerror = drop;
+				};
+
+				open();
+			}
+
+			function startRedemptions(pointRewards) {
+				return new Promise(resolve => {
+					listen(() => resolve(true), redemption => {
+						const audio = pointRewards.get(redemption.reward_id);
+						if (audio) enqueue(audio);
+					});
+				});
+			}
+
 			async function start() {
 				notify('Loading rewards...');
 				const rewards = await api('/api/rewards/' + userId, 'rewards');
@@ -238,6 +305,7 @@
 
 				const patterns = [];
 				const emoteRewards = new Map();
+				const pointRewards = new Map();
 				for (const reward of rewards) {
 					const audio = player(reward.upload.files);
 					if (!audio) continue;
@@ -246,6 +314,8 @@
 						if (regex) patterns.push({ regex, audio });
 					} else if (reward.type === 'chat_emote') {
 						emoteRewards.set(reward.data, audio);
+					} else if (reward.type === 'twitch_channel_point_reward') {
+						pointRewards.set(reward.data, audio);
 					}
 				}
 
@@ -253,13 +323,22 @@
 				const soundsLoaded = Promise.all(loading).then(results => {
 					const failed = results.filter(ok => !ok).length;
 					notify('Loaded ' + plural(results.length - failed, 'sound') + (failed ? ', ' + failed + ' failed' : ''));
+					return true;
 				});
 
-				if (!patterns.length && !emoteRewards.size) {
-					notify('No chat rewards found');
+				const sources = [];
+				if (patterns.length || emoteRewards.size) sources.push(startChat(patterns, emoteRewards));
+				if (pointRewards.size) sources.push(startRedemptions(pointRewards));
+				if (!sources.length) {
+					notify('No rewards found');
 					return;
 				}
 
+				const results = await Promise.all([soundsLoaded, ...sources]);
+				if (results.every(Boolean)) ready();
+			}
+
+			async function startChat(patterns, emoteRewards) {
 				notify('Loading emotes...');
 				const chat = await api('/api/widget/' + userId + '/chat', 'emotes');
 				const emotes = new Map();
@@ -270,12 +349,12 @@
 
 				if (!chat.channel) {
 					notify('No Twitch channel linked');
-					return;
+					return false;
 				}
 
 				let lastPlayed = -Infinity;
 
-				const joined = new Promise(resolve => {
+				await new Promise(resolve => {
 					connect(chat.channel.toLowerCase(), resolve, raw => {
 						const action = /^\x01ACTION (.*)\x01$/s.exec(raw);
 						const text = (action ? action[1] : raw).replace(/\u{E0000}/gu, '');
@@ -300,9 +379,7 @@
 						sounds.forEach(sound => enqueue(sound.audio));
 					});
 				});
-
-				await Promise.all([soundsLoaded, joined]);
-				ready();
+				return true;
 			}
 
 			start().catch(err => {

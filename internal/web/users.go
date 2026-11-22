@@ -66,12 +66,13 @@ func (h *Handler) userPage(c fiber.Ctx) error {
 	twitchID := h.twitchID(ctx, u.ID)
 	v := h.viewer(c)
 	return h.render(c, fiber.StatusOK, "user", fiber.Map{
-		"User":       u,
-		"Twitch":     twitchID != "",
-		"Self":       v != nil && v.ID == u.ID,
-		"Rewards":    items,
-		"EmoteNames": h.emoteNames(ctx, twitchID, items),
-		"Sounds":     uploads,
-		"Pager":      pages,
+		"User":         u,
+		"Twitch":       twitchID != "",
+		"Self":         v != nil && v.ID == u.ID,
+		"Rewards":      items,
+		"EmoteNames":   h.emoteNames(ctx, twitchID, items),
+		"PointRewards": h.pointRewards(ctx, u.ID, items),
+		"Sounds":       uploads,
+		"Pager":        pages,
 	})
 }
