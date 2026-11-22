@@ -148,8 +148,6 @@
 				return players.get(file.url);
 			}
 
-			const queue = [];
-			let draining = false;
 			const stage = document.getElementById('media');
 
 			function mediaKind(url, mime) {
@@ -372,11 +370,14 @@
 				});
 			}
 
-			function play(item) {
+			function showVisual(item) {
 				if (item.youtube) return showYouTube(item.youtube);
 				if (item.media) return playMedia(item.media);
 				if (item.clip) return showClip(item.clip);
-				const audio = item;
+				return Promise.resolve();
+			}
+
+			function playSound(audio) {
 				return new Promise(resolve => {
 					const done = () => {
 						audio.removeEventListener('ended', done);
@@ -391,19 +392,25 @@
 				});
 			}
 
-			async function drain() {
-				if (draining) return;
-				draining = true;
-				while (queue.length) {
-					await play(queue.shift());
-				}
-				draining = false;
+			function createQueue(run) {
+				const items = [];
+				let draining = false;
+				const drain = async () => {
+					if (draining) return;
+					draining = true;
+					while (items.length) {
+						await run(items.shift());
+					}
+					draining = false;
+				};
+				return item => {
+					items.push(item);
+					drain();
+				};
 			}
 
-			function enqueue(audio) {
-				queue.push(audio);
-				drain();
-			}
+			const enqueue = createQueue(playSound);
+			const enqueueVisual = createQueue(showVisual);
 
 			function compile(pattern) {
 				try {
@@ -553,17 +560,17 @@
 						const reward = pointRewards.get(redemption.reward_id);
 						if (!reward) return;
 						if (reward.action === 'anonupload') {
-							if (Array.isArray(msg.media) && msg.media.length) msg.media.forEach(item => enqueue({ media: item }));
+							if (Array.isArray(msg.media) && msg.media.length) msg.media.forEach(item => enqueueVisual({ media: item }));
 							else console.error('no media for redemption', redemption);
 							return;
 						}
 						if (reward.action === 'twitch_clip') {
-							if (msg.clip) enqueue({ clip: msg.clip });
+							if (msg.clip) enqueueVisual({ clip: msg.clip });
 							else console.error('no clip for redemption', redemption);
 							return;
 						}
 						if (reward.action === 'youtube') {
-							if (msg.youtube) enqueue({ youtube: msg.youtube });
+							if (msg.youtube) enqueueVisual({ youtube: msg.youtube });
 							else console.error('no youtube video for redemption', redemption);
 							return;
 						}
