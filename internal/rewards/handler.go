@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"errors"
-	"fmt"
 	"log"
 	"strings"
 
@@ -35,14 +34,14 @@ func NewHandler(opts Options) *Handler {
 	return &Handler{opts: opts}
 }
 
-func (h *Handler) Register(api fiber.Router) {
-	api.Post("/rewards/add", h.opts.Authenticate, h.Add)
-	api.Get("/rewards/events", h.eventsUpgrade, websocket.New(h.Events))
-	api.Get("/rewards/:user_id", h.List)
-	api.Delete("/rewards/:id", h.opts.Authenticate, h.Delete)
+func (h *Handler) Register(app fiber.Router) {
+	app.Get("/rewards/events", h.eventsUpgrade, websocket.New(h.Events))
 }
 
 func (h *Handler) Delete(c fiber.Ctx) error {
+	if err := h.opts.Authenticate(c); err != nil {
+		return err
+	}
 	if err := h.Remove(c.Context(), c.Params("id"), account.UserID(c)); err != nil {
 		return err
 	}
@@ -50,6 +49,9 @@ func (h *Handler) Delete(c fiber.Ctx) error {
 }
 
 func (h *Handler) Add(c fiber.Ctx) error {
+	if err := h.opts.Authenticate(c); err != nil {
+		return err
+	}
 	r, err := h.Create(c.Context(), sounds.BaseURL(c, h.opts.PublicURL), account.UserID(c),
 		c.FormValue("type"), c.FormValue("data"), c.FormValue("upload_id"))
 	if err != nil {
@@ -58,25 +60,14 @@ func (h *Handler) Add(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(r)
 }
 
-func (h *Handler) List(c fiber.Ctx) error {
-	userID := c.Params("user_id")
-
-	items, err := h.ForUser(c.Context(), sounds.BaseURL(c, h.opts.PublicURL), userID)
+func (h *Handler) Mine(c fiber.Ctx) error {
+	if err := h.opts.Authenticate(c); err != nil {
+		return err
+	}
+	items, err := h.ForUser(c.Context(), sounds.BaseURL(c, h.opts.PublicURL), account.UserID(c))
 	if err != nil {
 		return err
 	}
-
-	if len(items) == 0 {
-		exists, err := h.userExists(c.Context(), userID)
-		if err != nil {
-			log.Printf("rewards: checking user: %v", err)
-			return fiber.ErrInternalServerError
-		}
-		if !exists {
-			return fiber.NewError(fiber.StatusNotFound, fmt.Sprintf("user %q not found", userID))
-		}
-	}
-
 	return c.JSON(items)
 }
 

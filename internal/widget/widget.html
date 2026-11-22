@@ -77,7 +77,7 @@
 			async function api(endpoint, what) {
 				for (let attempt = 0; ; attempt++) {
 					try {
-						const res = await fetch(root + endpoint, { cache: 'no-store' });
+						const res = await fetch(root + endpoint, { cache: 'no-store', headers: { Accept: 'application/json' } });
 						const body = await res.json();
 						if (!res.ok) throw new Error(body.message || res.statusText);
 						return body.data;
@@ -233,7 +233,7 @@
 			}
 
 			function listen(onConnected, onRedemption) {
-				const url = new URL(root + '/api/rewards/events', location.href);
+				const url = new URL(root + '/rewards/events', location.href);
 				url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 				url.searchParams.set('user_id', userId);
 				let attempts = 0;
@@ -300,7 +300,7 @@
 
 			async function start() {
 				notify('Loading rewards...');
-				const rewards = await api('/api/rewards/' + userId, 'rewards');
+				const { rewards } = await api('/users/' + encodeURIComponent(userId), 'rewards');
 				notify('Loaded ' + plural(rewards.length, 'reward'));
 
 				const patterns = [];
@@ -340,7 +340,7 @@
 
 			async function startChat(patterns, emoteRewards) {
 				notify('Loading emotes...');
-				const chat = await api('/api/widget/' + userId + '/chat', 'emotes');
+				const chat = await api('/widget/' + encodeURIComponent(userId), 'emotes');
 				const emotes = new Map();
 				for (const emote of chat.emotes) {
 					if (!emotes.has(emote.name)) emotes.set(emote.name, emote.provider + ':' + emote.id);

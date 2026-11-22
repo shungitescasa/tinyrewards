@@ -72,10 +72,6 @@ func NewHandler(opts Options) *Handler {
 	return h
 }
 
-func (h *Handler) Register(api fiber.Router) {
-	api.Get("/account", h.Authenticate, h.Me)
-}
-
 func (h *Handler) TwitchEnabled() bool {
 	return h.twitch != nil
 }

@@ -76,3 +76,31 @@ func (h *Handler) userPage(c fiber.Ctx) error {
 		"Pager":        pages,
 	})
 }
+
+func (h *Handler) userJSON(c fiber.Ctx) error {
+	ctx, baseURL := c.Context(), h.baseURL(c)
+
+	u, err := h.opts.Accounts.FindByID(ctx, c.Params("id"))
+	if errors.Is(err, sql.ErrNoRows) {
+		return fiber.NewError(fiber.StatusNotFound, "user not found")
+	}
+	if err != nil {
+		return err
+	}
+
+	items, err := h.opts.Rewards.ForUser(ctx, baseURL, u.ID)
+	if err != nil {
+		return err
+	}
+
+	uploads, _, err := h.opts.Sounds.Find(ctx, baseURL, sounds.Query{Sort: sounds.SortRecent, Page: pageNumber(c), UserID: u.ID})
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(fiber.Map{
+		"user":    u,
+		"rewards": items,
+		"sounds":  uploads,
+	})
+}

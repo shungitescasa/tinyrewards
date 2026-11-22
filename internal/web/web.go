@@ -23,6 +23,7 @@ import (
 
 	"git.shungites.casa/tiny/rewards/internal/account"
 	"git.shungites.casa/tiny/rewards/internal/emotes"
+	"git.shungites.casa/tiny/rewards/internal/middleware"
 	"git.shungites.casa/tiny/rewards/internal/rewards"
 	"git.shungites.casa/tiny/rewards/internal/sounds"
 	"git.shungites.casa/tiny/rewards/internal/twitch"
@@ -103,20 +104,20 @@ func (h *Handler) Register(app fiber.Router) {
 	app.Get("/static/*", static.New("static", static.Config{FS: files, MaxAge: assetMaxAge}))
 
 	app.Get("/", h.index)
-	app.Get("/sounds", h.soundList)
+	app.Get("/sounds", middleware.Negotiate(h.soundList, h.opts.Sounds.List))
 	app.Get("/sounds/upload", h.uploadPage)
-	app.Post("/sounds/upload", sameOrigin, h.upload)
-	app.Get("/rewards", h.rewardList)
+	app.Post("/sounds/upload", sameOrigin, middleware.Negotiate(h.upload, h.opts.Sounds.Upload))
+	app.Get("/rewards", middleware.Negotiate(h.rewardList, h.opts.Rewards.Mine))
 	app.Get("/rewards/new", h.rewardPage)
-	app.Post("/rewards/new", sameOrigin, h.createReward)
-	app.Post("/rewards/:id/delete", sameOrigin, h.deleteReward)
-	app.Get("/account", h.accountPage)
+	app.Post("/rewards/new", sameOrigin, middleware.Negotiate(h.createReward, h.opts.Rewards.Add))
+	app.Post("/rewards/:id/delete", sameOrigin, middleware.Negotiate(h.deleteReward, h.opts.Rewards.Delete))
+	app.Get("/account", middleware.Negotiate(h.accountPage, h.opts.Accounts.Me))
 	app.Get("/account/login", h.loginPage)
 	if h.opts.Accounts.TwitchEnabled() {
 		app.Get("/account/login/twitch", h.opts.Accounts.LoginTwitch)
 	}
 	app.Post("/account/logout", sameOrigin, h.opts.Accounts.Logout)
-	app.Get("/users/:id", h.userPage)
+	app.Get("/users/:id", middleware.Negotiate(h.userPage, h.userJSON))
 }
 
 func (h *Handler) Error(c fiber.Ctx, err error) error {

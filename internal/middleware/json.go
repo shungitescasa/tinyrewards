@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -14,28 +16,56 @@ type envelope struct {
 	Data    json.RawMessage `json:"data"`
 }
 
-func JSON() fiber.Handler {
+func WantsHTML(c fiber.Ctx) bool {
+	for part := range strings.SplitSeq(c.Get(fiber.HeaderAccept), ",") {
+		mediaType, params, _ := strings.Cut(part, ";")
+		if !strings.EqualFold(strings.TrimSpace(mediaType), fiber.MIMETextHTML) {
+			continue
+		}
+		for param := range strings.SplitSeq(params, ";") {
+			key, value, _ := strings.Cut(param, "=")
+			if !strings.EqualFold(strings.TrimSpace(key), "q") {
+				continue
+			}
+			if q, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil && q <= 0 {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func Negotiate(html, api fiber.Handler) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		if err := c.Next(); err != nil {
-			return WriteError(c, err)
+		c.Append(fiber.HeaderVary, fiber.HeaderAccept)
+		if WantsHTML(c) {
+			return html(c)
 		}
+		return wrap(c, api(c))
+	}
+}
 
-		res := c.Response()
-		if !bytes.HasPrefix(res.Header.ContentType(), []byte(fiber.MIMEApplicationJSON)) {
-			return nil
-		}
+func wrap(c fiber.Ctx, err error) error {
+	if err != nil {
+		return WriteError(c, err)
+	}
 
-		var data json.RawMessage
-		if body := res.Body(); len(bytes.TrimSpace(body)) != 0 {
-			data = body
-		}
-		out, err := json.Marshal(envelope{Data: data})
-		if err != nil {
-			return WriteError(c, err)
-		}
-		res.SetBody(out)
+	res := c.Response()
+	if !bytes.HasPrefix(res.Header.ContentType(), []byte(fiber.MIMEApplicationJSON)) {
 		return nil
 	}
+
+	var data json.RawMessage
+	if body := res.Body(); len(bytes.TrimSpace(body)) != 0 {
+		data = body
+	}
+	out, err := json.Marshal(envelope{Data: data})
+	if err != nil {
+		return WriteError(c, err)
+	}
+	res.SetBody(out)
+	return nil
 }
 
 func WriteError(c fiber.Ctx, err error) error {

@@ -141,18 +141,16 @@ func main() {
 	app := fiber.New(fiber.Config{
 		BodyLimit: int(cfg.Files.MaxSize + multipartOverhead),
 		ErrorHandler: func(c fiber.Ctx, err error) error {
-			if p := c.Path(); p == apiPrefix || strings.HasPrefix(p, apiPrefix+"/") {
-				return middleware.WriteError(c, err)
-			}
+			if middleware.WantsHTML(c) {
 			return pages.Error(c, err)
+			}
+			return middleware.WriteError(c, err)
 		},
 	})
 
-	api := app.Group(apiPrefix, middleware.JSON())
-	accounts.Register(api)
-	soundHandler.Register(app, api)
-	rewardHandler.Register(api)
-	widgetHandler.Register(app, api)
+	soundHandler.Register(app)
+	rewardHandler.Register(app)
+	widgetHandler.Register(app)
 	pages.Register(app)
 
 	log.Fatal(app.Listen(cfg.Server.Address))

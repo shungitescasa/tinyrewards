@@ -12,6 +12,7 @@ import (
 
 	"git.shungites.casa/tiny/rewards/internal/account"
 	"git.shungites.casa/tiny/rewards/internal/emotes"
+	"git.shungites.casa/tiny/rewards/internal/middleware"
 )
 
 //go:embed widget.html
@@ -30,9 +31,8 @@ func NewHandler(opts Options) *Handler {
 	return &Handler{opts: opts}
 }
 
-func (h *Handler) Register(app, api fiber.Router) {
-	app.Get("/widget/:user_id", h.Page)
-	api.Get("/widget/:user_id/chat", h.Chat)
+func (h *Handler) Register(app fiber.Router) {
+	app.Get("/widget/:user_id", middleware.Negotiate(h.Page, h.Chat))
 }
 
 type channel struct {

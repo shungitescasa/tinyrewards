@@ -22,8 +22,8 @@ func (h *Handler) OptionalAuthenticate(c fiber.Ctx) error {
 
 func (h *Handler) authenticate(c fiber.Ctx, required bool) error {
 	header := c.Get(fiber.HeaderAuthorization)
-	if header == "" && !required {
-		return c.Next()
+	if header == "" {
+		return h.authenticateSession(c, required)
 	}
 	scheme, token, ok := strings.Cut(header, " ")
 	if !ok || !strings.EqualFold(scheme, "Bearer") {
@@ -34,7 +34,26 @@ func (h *Handler) authenticate(c fiber.Ctx, required bool) error {
 		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 	}
 	c.Locals(userIDKey{}, userID)
-	return c.Next()
+	return nil
+}
+
+func (h *Handler) authenticateSession(c fiber.Ctx, required bool) error {
+	token := c.Cookies(SessionCookie)
+	if token == "" {
+		if required {
+			return fiber.NewError(fiber.StatusUnauthorized, "missing bearer token")
+		}
+		return nil
+	}
+	userID, err := h.tokens.verify(token, time.Now())
+	if err != nil {
+		if required {
+			return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+		}
+		return nil
+	}
+	c.Locals(userIDKey{}, userID)
+	return nil
 }
 
 func UserID(c fiber.Ctx) string {
@@ -43,6 +62,9 @@ func UserID(c fiber.Ctx) string {
 }
 
 func (h *Handler) Me(c fiber.Ctx) error {
+	if err := h.Authenticate(c); err != nil {
+		return err
+	}
 	u, err := h.FindByID(c.Context(), UserID(c))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

@@ -41,13 +41,14 @@ func NewHandler(opts Options) *Handler {
 	return &Handler{opts: opts}
 }
 
-func (h *Handler) Register(app, api fiber.Router) {
-	api.Get("/sounds", h.List)
-	api.Post("/sounds/upload", h.opts.Authenticate, h.Upload)
+func (h *Handler) Register(app fiber.Router) {
 	app.Get(filesPath+":name", h.Download)
 }
 
 func (h *Handler) Upload(c fiber.Ctx) error {
+	if err := h.opts.Authenticate(c); err != nil {
+		return err
+	}
 	fh, _ := c.FormFile("sound")
 	id, duration, err := h.Save(c.Context(), account.UserID(c), c.FormValue("code"), fh)
 	if err != nil {
