@@ -111,6 +111,7 @@ func (h *Handler) Register(app fiber.Router) {
 	app.Get("/rewards/new", h.rewardPage)
 	app.Post("/rewards/new", sameOrigin, middleware.Negotiate(h.createReward, h.opts.Rewards.Add))
 	app.Post("/rewards/:id/delete", sameOrigin, middleware.Negotiate(h.deleteReward, h.opts.Rewards.Delete))
+	app.Delete("/rewards/:id", sameOrigin, middleware.Negotiate(h.deleteReward, h.opts.Rewards.Delete))
 	app.Get("/account", middleware.Negotiate(h.accountPage, h.opts.Accounts.Me))
 	app.Get("/account/login", h.loginPage)
 	if h.opts.Accounts.TwitchEnabled() {
