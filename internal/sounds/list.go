@@ -2,18 +2,22 @@ package sounds
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math"
 	"strconv"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/gofiber/fiber/v3"
 )
 
 const (
 	SortRecent = "recent"
 	SortOldest = "oldest"
+
+	maxCodePattern = 200
 )
 
 type File struct {
@@ -38,10 +42,11 @@ type Query struct {
 	Page   int64
 	Limit  int64
 	UserID string
+	Code   string
 }
 
 func (h *Handler) List(c fiber.Ctx) error {
-	q := Query{Sort: c.Query("sort", SortRecent), Page: 1}
+	q := Query{Sort: c.Query("sort", SortRecent), Page: 1, Code: c.Query("q")}
 	if raw := c.Query("p"); raw != "" {
 		p, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil {
@@ -76,12 +81,22 @@ func (h *Handler) Find(ctx context.Context, baseURL string, q Query) ([]Upload, 
 		return nil, false, fiber.NewError(fiber.StatusBadRequest, "p must be a positive integer")
 	}
 
+	if len(q.Code) > maxCodePattern {
+		return nil, false, fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("search pattern must be at most %d characters", maxCodePattern))
+	}
+
 	filter, args := "TRUE", []any{}
 	if q.UserID != "" {
-		filter, args = "user_id = ?", []any{q.UserID}
+		filter, args = filter+" AND user_id = ?", append(args, q.UserID)
+	}
+	if q.Code != "" {
+		filter, args = filter+" AND code REGEXP ?", append(args, q.Code)
 	}
 
 	items, err := h.query(ctx, baseURL, filter, args, direction, pageSize+1, (q.Page-1)*pageSize)
+	if message, ok := regexpError(err); ok {
+		return nil, false, fiber.NewError(fiber.StatusBadRequest, "invalid search pattern: "+message)
+	}
 	if err != nil {
 		log.Printf("sounds: listing uploads: %v", err)
 		return nil, false, fiber.ErrInternalServerError
@@ -92,6 +107,14 @@ func (h *Handler) Find(ctx context.Context, baseURL string, q Query) ([]Upload, 
 		items = items[:pageSize]
 	}
 	return items, more, nil
+}
+
+func regexpError(err error) (string, bool) {
+	var me *mysql.MySQLError
+	if !errors.As(err, &me) || (me.Number != 1139 && (me.Number < 3684 || me.Number > 3699)) {
+		return "", false
+	}
+	return me.Message, true
 }
 
 func (h *Handler) Get(ctx context.Context, baseURL, id string) (Upload, error) {

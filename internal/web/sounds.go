@@ -17,17 +17,26 @@ func (h *Handler) soundList(c fiber.Ctx) error {
 	if c.Query("sort") == sounds.SortOldest {
 		sort = sounds.SortOldest
 	}
-	page := pageNumber(c)
+	page, search := pageNumber(c), c.Query("q")
 
-	items, more, err := h.opts.Sounds.Find(c.Context(), h.baseURL(c), sounds.Query{Sort: sort, Page: page})
-	if err != nil {
+	query := url.Values{"sort": {sort}}
+	if search != "" {
+		query.Set("q", search)
+	}
+	m := fiber.Map{"Sort": sort, "Search": search}
+
+	items, more, err := h.opts.Sounds.Find(c.Context(), h.baseURL(c), sounds.Query{Sort: sort, Page: page, Code: search})
+	status, message, ok := userError(err)
+	switch {
+	case ok:
+		m["Error"] = message
+		return h.render(c, status, "sounds", m)
+	case err != nil:
 		return err
 	}
-	return h.render(c, fiber.StatusOK, "sounds", fiber.Map{
-		"Sort":   sort,
-		"Sounds": items,
-		"Pager":  newPager("/sounds", url.Values{"sort": {sort}}, page, more),
-	})
+	m["Sounds"] = items
+	m["Pager"] = newPager("/sounds", query, page, more)
+	return h.render(c, fiber.StatusOK, "sounds", m)
 }
 
 func (h *Handler) uploadPage(c fiber.Ctx) error {

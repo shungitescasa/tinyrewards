@@ -330,6 +330,19 @@ details[open]>summary {
 	box-shadow: var(--shadow);
 }
 
+.toolbar>.search {
+	display: flex;
+	flex: 1;
+	gap: var(--pad);
+	min-width: 200px;
+	max-width: 480px;
+}
+
+.toolbar>.search>input {
+	flex: 1;
+	min-width: 0;
+}
+
 /** DROPDOWN */
 .dropdown {
 	position: relative;

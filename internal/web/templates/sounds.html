@@ -4,9 +4,17 @@
 <article>
 	<div class="toolbar">
 		<nav class="tabs">
-			<a href="/sounds?sort=recent" {{- if eq .Sort "recent" }} class="active" {{- end}}>recent</a>
-			<a href="/sounds?sort=oldest" {{- if eq .Sort "oldest" }} class="active" {{- end}}>oldest</a>
+			<a href="/sounds?sort=recent{{with .Search}}&amp;q={{.}}{{end}}" {{- if eq .Sort "recent" }} class="active"
+				{{- end}}>recent</a>
+			<a href="/sounds?sort=oldest{{with .Search}}&amp;q={{.}}{{end}}" {{- if eq .Sort "oldest" }} class="active"
+				{{- end}}>oldest</a>
 		</nav>
+		<form action="/sounds" method="get" class="search">
+			<input type="hidden" name="sort" value="{{.Sort}}">
+			<input type="search" name="q" value="{{.Search}}" placeholder="search by code (regex)"
+				aria-label="search by code" maxlength="200" autocomplete="off">
+			<button type="submit">search</button>
+		</form>
 		<a href="/sounds/upload" class="button green">upload</a>
 	</div>
 
@@ -15,6 +23,8 @@
 		{{- range .Sounds}}{{template "sound" .}}{{end}}
 	</div>
 	{{template "pagination" .Pager}}
+	{{- else if .Search}}
+	<p>No sounds match <code>{{.Search}}</code>.</p>
 	{{- else}}
 	<p>No sounds here yet.</p>
 	{{- end}}
