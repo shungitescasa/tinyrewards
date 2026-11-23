@@ -30,6 +30,7 @@ type Options struct {
 	PublicURL   string
 
 	AnonymousUploads bool
+	Moderation       bool
 	Authenticate     fiber.Handler
 }
 
@@ -50,17 +51,36 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 		return err
 	}
 	fh, _ := c.FormFile("sound")
-	id, duration, err := h.Save(c.Context(), account.UserID(c), c.FormValue("code"), fh)
+	saved, err := h.Save(c.Context(), account.UserID(c), c.FormValue("code"), c.FormValue("visibility"), fh)
 	if err != nil {
 		return err
 	}
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"id":       id,
-		"duration": duration.Seconds(),
+		"id":         saved.ID,
+		"duration":   saved.Duration.Seconds(),
+		"visibility": saved.Visibility,
 	})
 }
 
-func (h *Handler) Save(ctx context.Context, userID, rawCode string, fh *multipart.FileHeader) (string, time.Duration, error) {
+type Saved struct {
+	ID         string
+	Duration   time.Duration
+	Visibility int
+}
+
+func (h *Handler) Save(ctx context.Context, userID, rawCode, rawVisibility string, fh *multipart.FileHeader) (Saved, error) {
+	visibility, err := ParseVisibility(rawVisibility)
+	if err != nil {
+		return Saved{}, fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	if visibility == VisibilityPublic && h.opts.Moderation {
+		visibility = VisibilityPending
+	}
+	id, duration, err := h.save(ctx, userID, rawCode, visibility, fh)
+	return Saved{ID: id, Duration: duration, Visibility: visibility}, err
+}
+
+func (h *Handler) save(ctx context.Context, userID, rawCode string, visibility int, fh *multipart.FileHeader) (string, time.Duration, error) {
 	if userID == "" && !h.opts.AnonymousUploads {
 		return "", 0, fiber.NewError(fiber.StatusUnauthorized, "authentication is required to upload sounds")
 	}
@@ -80,7 +100,7 @@ func (h *Handler) Save(ctx context.Context, userID, rawCode string, fh *multipar
 		return "", 0, fiber.NewError(fiber.StatusRequestEntityTooLarge, fmt.Sprintf("sound file exceeds %d bytes", h.opts.MaxSize))
 	}
 
-	id, duration, err := h.ingest(ctx, userID, code, fh)
+	id, duration, err := h.ingest(ctx, userID, code, visibility, fh)
 	var fe *fiber.Error
 	if err != nil && !errors.As(err, &fe) {
 		log.Printf("sounds: saving upload: %v", err)
@@ -89,7 +109,7 @@ func (h *Handler) Save(ctx context.Context, userID, rawCode string, fh *multipar
 	return id, duration, err
 }
 
-func (h *Handler) ingest(ctx context.Context, userID, code string, fh *multipart.FileHeader) (string, time.Duration, error) {
+func (h *Handler) ingest(ctx context.Context, userID, code string, visibility int, fh *multipart.FileHeader) (string, time.Duration, error) {
 	src, err := fh.Open()
 	if err != nil {
 		return "", 0, err
@@ -151,7 +171,7 @@ func (h *Handler) ingest(ctx context.Context, userID, code string, fh *multipart
 	}
 	key := fileID + "." + storedExtension
 
-	err = h.store(ctx, id, code, userID, file, func() error {
+	err = h.store(ctx, id, code, userID, visibility, file, func() error {
 		f, err := os.Open(processed)
 		if err != nil {
 			return err

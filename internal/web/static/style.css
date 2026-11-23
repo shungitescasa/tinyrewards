@@ -446,6 +446,30 @@ details[open]>summary {
 	gap: var(--pad);
 }
 
+.approval {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pad);
+}
+
+.approval>.sound {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 280px;
+	max-width: 100%;
+}
+
+.moderate {
+	display: flex;
+	gap: calc(var(--pad) / 2);
+	padding: var(--pad);
+	padding-top: 0;
+}
+
+.moderate>button {
+	flex: 1;
+}
+
 /** PLAYER */
 .player {
 	display: flex;

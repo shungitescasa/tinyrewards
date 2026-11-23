@@ -49,8 +49,10 @@ func (h *Handler) userPage(c fiber.Ctx) error {
 		return err
 	}
 
+	v := h.viewer(c)
+	self := v != nil && v.ID == u.ID
 	page := pageNumber(c)
-	uploads, more, err := h.opts.Sounds.Find(ctx, baseURL, sounds.Query{Sort: sounds.SortRecent, Page: page, UserID: u.ID})
+	uploads, more, err := h.opts.Sounds.Find(ctx, baseURL, sounds.Query{Sort: sounds.SortRecent, Page: page, UserID: u.ID, All: self})
 	if err != nil {
 		return err
 	}
@@ -64,11 +66,10 @@ func (h *Handler) userPage(c fiber.Ctx) error {
 	}
 
 	twitchID := h.twitchID(ctx, u.ID)
-	v := h.viewer(c)
 	return h.render(c, fiber.StatusOK, "user", fiber.Map{
 		"User":         u,
 		"Twitch":       twitchID != "",
-		"Self":         v != nil && v.ID == u.ID,
+		"Self":         self,
 		"Rewards":      items,
 		"EmoteNames":   h.emoteNames(ctx, twitchID, items),
 		"PointRewards": h.pointRewards(ctx, u.ID, items),
@@ -93,7 +94,11 @@ func (h *Handler) userJSON(c fiber.Ctx) error {
 		return err
 	}
 
-	uploads, _, err := h.opts.Sounds.Find(ctx, baseURL, sounds.Query{Sort: sounds.SortRecent, Page: pageNumber(c), UserID: u.ID})
+	if err := h.opts.Accounts.OptionalAuthenticate(c); err != nil {
+		return err
+	}
+	self := account.UserID(c) == u.ID
+	uploads, _, err := h.opts.Sounds.Find(ctx, baseURL, sounds.Query{Sort: sounds.SortRecent, Page: pageNumber(c), UserID: u.ID, All: self})
 	if err != nil {
 		return err
 	}

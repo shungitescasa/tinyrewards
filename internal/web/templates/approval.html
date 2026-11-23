@@ -1,0 +1,27 @@
+{{define "title"}}Approval · {{end}}
+
+{{define "main"}}
+<article>
+	<h1>Pending approval</h1>
+
+	{{- if .Sounds}}
+	<div class="approval">
+		{{- range .Sounds}}
+		<div class="sound box">
+			{{template "player" dict "Sound" .}}
+			<form action="/system/approval" method="post" class="moderate">
+				<input type="hidden" name="id" value="{{.ID}}">
+				<input type="hidden" name="csrf" value="{{$.CSRF}}">
+				<button type="submit" name="action" value="publish" class="green">publish</button>
+				<button type="submit" name="action" value="unlist">unlist</button>
+				<button type="submit" name="action" value="delete" class="red">delete</button>
+			</form>
+		</div>
+		{{- end}}
+	</div>
+	{{template "pagination" .Pager}}
+	{{- else}}
+	<p>Nothing is waiting for approval.</p>
+	{{- end}}
+</article>
+{{end}}

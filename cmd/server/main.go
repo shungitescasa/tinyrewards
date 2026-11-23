@@ -107,6 +107,7 @@ func main() {
 		PageSize:         cfg.Sounds.PageSize,
 		PublicURL:        cfg.Server.PublicURL,
 		AnonymousUploads: cfg.Sounds.AnonymousUploads,
+		Moderation:       cfg.Sounds.Moderation,
 		Authenticate:     accounts.OptionalAuthenticate,
 	})
 

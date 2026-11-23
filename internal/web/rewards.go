@@ -140,7 +140,7 @@ func (h *Handler) renderReward(c fiber.Ctx, status int, v *account.User, rewardT
 	m["Upload"] = upload
 
 	if action == rewards.ActionSound && upload == nil {
-		uploads, _, err := h.opts.Sounds.Find(ctx, baseURL, sounds.Query{Sort: sounds.SortRecent, Page: 1, Limit: recentUploads, UserID: v.ID})
+		uploads, _, err := h.opts.Sounds.Find(ctx, baseURL, sounds.Query{Sort: sounds.SortRecent, Page: 1, Limit: recentUploads, UserID: v.ID, All: true})
 		if err != nil {
 			return err
 		}

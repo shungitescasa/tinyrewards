@@ -64,7 +64,7 @@ func uploadCode(raw string) (string, error) {
 	return code, nil
 }
 
-func (h *Handler) store(ctx context.Context, uploadID, code, userID string, file storedFile, place func() error) error {
+func (h *Handler) store(ctx context.Context, uploadID, code, userID string, visibility int, file storedFile, place func() error) error {
 	tx, err := h.opts.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -83,8 +83,8 @@ func (h *Handler) store(ctx context.Context, uploadID, code, userID string, file
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO uploads (id, code, user_id) VALUES (?, ?, ?)`,
-		uploadID, code, sql.NullString{String: userID, Valid: userID != ""},
+	if _, err := tx.ExecContext(ctx, `INSERT INTO uploads (id, code, user_id, visibility) VALUES (?, ?, ?, ?)`,
+		uploadID, code, sql.NullString{String: userID, Valid: userID != ""}, visibility,
 	); err != nil {
 		return err
 	}

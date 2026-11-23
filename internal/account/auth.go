@@ -90,3 +90,21 @@ func (h *Handler) Delete(c fiber.Ctx) error {
 	h.ClearSession(c)
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+func (h *Handler) RequireModerator(c fiber.Ctx) (User, error) {
+	if err := h.Authenticate(c); err != nil {
+		return User{}, err
+	}
+	u, err := h.FindByID(c.Context(), UserID(c))
+	if errors.Is(err, sql.ErrNoRows) {
+		return User{}, fiber.NewError(fiber.StatusUnauthorized, "user no longer exists")
+	}
+	if err != nil {
+		log.Printf("account: loading moderator: %v", err)
+		return User{}, fiber.ErrInternalServerError
+	}
+	if !u.Moderator() {
+		return User{}, fiber.NewError(fiber.StatusForbidden, "only moderators can do this")
+	}
+	return u, nil
+}

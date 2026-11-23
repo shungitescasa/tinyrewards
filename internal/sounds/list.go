@@ -33,6 +33,7 @@ type Upload struct {
 	Code       string    `json:"code"`
 	UserID     *string   `json:"user_id"`
 	Username   *string   `json:"username"`
+	Visibility int       `json:"visibility"`
 	UploadedAt time.Time `json:"uploaded_at"`
 	Files      []File    `json:"files"`
 }
@@ -43,6 +44,8 @@ type Query struct {
 	Limit  int64
 	UserID string
 	Code   string
+	All    bool
+	Status *int
 }
 
 func (h *Handler) List(c fiber.Ctx) error {
@@ -86,6 +89,12 @@ func (h *Handler) Find(ctx context.Context, baseURL string, q Query) ([]Upload, 
 	}
 
 	filter, args := "TRUE", []any{}
+	switch {
+	case q.Status != nil:
+		filter, args = filter+" AND visibility = ?", append(args, *q.Status)
+	case !q.All:
+		filter, args = filter+" AND visibility = ?", append(args, VisibilityPublic)
+	}
 	if q.UserID != "" {
 		filter, args = filter+" AND user_id = ?", append(args, q.UserID)
 	}
@@ -107,6 +116,10 @@ func (h *Handler) Find(ctx context.Context, baseURL string, q Query) ([]Upload, 
 		items = items[:pageSize]
 	}
 	return items, more, nil
+}
+
+func Visibility(v int) *int {
+	return &v
 }
 
 func regexpError(err error) (string, bool) {
@@ -133,9 +146,9 @@ func (h *Handler) query(ctx context.Context, baseURL, filter string, args []any,
 	items := []Upload{}
 
 	query := fmt.Sprintf(
-		`SELECT u.id, u.code, u.user_id, usr.username, u.uploaded_at, f.id, f.mime, f.extension, f.size
+		`SELECT u.id, u.code, u.user_id, usr.username, u.visibility, u.uploaded_at, f.id, f.mime, f.extension, f.size
 		 FROM (
-		     SELECT id, code, user_id, uploaded_at FROM uploads
+		     SELECT id, code, user_id, visibility, uploaded_at FROM uploads
 		     WHERE %[2]s
 		     ORDER BY uploaded_at %[1]s, id %[1]s
 		     LIMIT ? OFFSET ?
@@ -160,7 +173,7 @@ func (h *Handler) query(ctx context.Context, baseURL, filter string, args []any,
 			extension *string
 			size      *int64
 		)
-		if err := rows.Scan(&u.ID, &u.Code, &u.UserID, &u.Username, &u.UploadedAt, &fileID, &mime, &extension, &size); err != nil {
+		if err := rows.Scan(&u.ID, &u.Code, &u.UserID, &u.Username, &u.Visibility, &u.UploadedAt, &fileID, &mime, &extension, &size); err != nil {
 			return nil, err
 		}
 		if n := len(items); n == 0 || items[n-1].ID != u.ID {

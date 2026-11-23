@@ -40,6 +40,7 @@ type Files struct {
 type Sounds struct {
 	PageSize         int
 	AnonymousUploads bool
+	Moderation       bool
 }
 
 type Database struct {
@@ -202,6 +203,14 @@ func Load(path string, required bool) (Config, error) {
 			return cfg, fmt.Errorf("%s: sounds.anonymous_uploads: %w", path, err)
 		}
 		cfg.Sounds.AnonymousUploads = anonymous
+	}
+
+	if key := sounds.Key("moderation"); key.String() != "" {
+		moderation, err := key.Bool()
+		if err != nil {
+			return cfg, fmt.Errorf("%s: sounds.moderation: %w", path, err)
+		}
+		cfg.Sounds.Moderation = moderation
 	}
 
 	if key := sounds.Key("page_size"); key.String() != "" {

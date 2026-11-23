@@ -13,14 +13,40 @@ import (
 
 const PlatformTwitch = "twitch"
 
+const (
+	DefaultRole = "user"
+	AdminRole   = "admin"
+)
+
 const mysqlDuplicateEntry = 1062
 
 var ErrUsernameTaken = errors.New("username is already taken")
 
 type User struct {
-	ID       string    `json:"id"`
-	Username string    `json:"username"`
-	JoinedAt time.Time `json:"joined_at"`
+	ID          string      `json:"id"`
+	Username    string      `json:"username"`
+	JoinedAt    time.Time   `json:"joined_at"`
+	Permissions Permissions `json:"permissions"`
+}
+
+type Permissions struct {
+	ModerateSounds bool `json:"moderate_sounds"`
+}
+
+func (u User) Moderator() bool {
+	return u.Permissions.ModerateSounds
+}
+
+const selectUser = `SELECT u.id, u.username, u.joined_at, COALESCE(MAX(r.moderate_sounds), FALSE)
+	FROM users u
+	LEFT JOIN role_assigns ra ON ra.user_id = u.id
+	LEFT JOIN roles r ON r.id = ra.role_id
+	`
+
+func scanUser(row *sql.Row) (User, error) {
+	var u User
+	err := row.Scan(&u.ID, &u.Username, &u.JoinedAt, &u.Permissions.ModerateSounds)
+	return u, err
 }
 
 func (h *Handler) login(ctx context.Context, platform, aliasID, username string) (User, error) {
@@ -45,24 +71,16 @@ func (h *Handler) login(ctx context.Context, platform, aliasID, username string)
 }
 
 func (h *Handler) findByConnection(ctx context.Context, platform, aliasID string) (User, error) {
-	var u User
-	err := h.db.QueryRowContext(ctx,
-		`SELECT u.id, u.username, u.joined_at
-		 FROM connections c
-		 JOIN users u ON u.id = c.user_id
-		 WHERE c.platform = ? AND c.alias_id = ?`,
+	return scanUser(h.db.QueryRowContext(ctx,
+		selectUser+`JOIN connections c ON c.user_id = u.id
+		 WHERE c.platform = ? AND c.alias_id = ?
+		 GROUP BY u.id, u.username, u.joined_at`,
 		platform, aliasID,
-	).Scan(&u.ID, &u.Username, &u.JoinedAt)
-	return u, err
+	))
 }
 
 func (h *Handler) FindByID(ctx context.Context, id string) (User, error) {
-	var u User
-	err := h.db.QueryRowContext(ctx,
-		`SELECT id, username, joined_at FROM users WHERE id = ?`,
-		id,
-	).Scan(&u.ID, &u.Username, &u.JoinedAt)
-	return u, err
+	return scanUser(h.db.QueryRowContext(ctx, selectUser+`WHERE u.id = ? GROUP BY u.id, u.username, u.joined_at`, id))
 }
 
 type Connection struct {
@@ -103,6 +121,12 @@ func (h *Handler) register(ctx context.Context, platform, aliasID, username stri
 	}
 	defer tx.Rollback()
 
+	var adminRole string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM roles WHERE id = ? FOR UPDATE`, AdminRole).Scan(&adminRole)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return User{}, err
+	}
+
 	if _, err := tx.ExecContext(ctx, `INSERT INTO users (id, username) VALUES (?, ?)`, u.ID, u.Username); err != nil {
 		return User{}, err
 	}
@@ -112,10 +136,34 @@ func (h *Handler) register(ctx context.Context, platform, aliasID, username stri
 	); err != nil {
 		return User{}, err
 	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO role_assigns (role_id, user_id) VALUES (?, ?)`,
+		DefaultRole, u.ID,
+	); err != nil {
+		return User{}, err
+	}
+	if adminRole != "" {
+		if err := assignFirstAdmin(ctx, tx, adminRole, u.ID); err != nil {
+			return User{}, err
+		}
+	}
 	if err := tx.QueryRowContext(ctx, `SELECT joined_at FROM users WHERE id = ?`, u.ID).Scan(&u.JoinedAt); err != nil {
 		return User{}, err
 	}
 	return u, tx.Commit()
+}
+
+func assignFirstAdmin(ctx context.Context, tx *sql.Tx, roleID, userID string) error {
+	var other string
+	err := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE id <> ? LIMIT 1 FOR UPDATE`, userID).Scan(&other)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO role_assigns (role_id, user_id) VALUES (?, ?)`, roleID, userID)
+	return err
 }
 
 func isDuplicate(err error) bool {

@@ -53,7 +53,7 @@ func (h *Handler) remove(ctx context.Context, uploadID, userID string) error {
 	if err != nil {
 		return err
 	}
-	if !owner.Valid || owner.String != userID {
+	if userID != "" && (!owner.Valid || owner.String != userID) {
 		return fiber.NewError(fiber.StatusForbidden, "you can only delete your own sounds")
 	}
 

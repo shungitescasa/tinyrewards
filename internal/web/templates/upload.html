@@ -16,6 +16,15 @@
 			<input type="file" id="sound" name="sound" accept=".ogg,.wav,.mp3,audio/ogg,audio/wav,audio/mpeg" required>
 			<p class="hint">ogg, wav or mp3, up to {{.MaxSize}} and {{.MaxDuration}} long.</p>
 
+			<label for="visibility">Visibility</label>
+			<select id="visibility" name="visibility">
+				<option value="public">Public</option>
+				<option value="unlisted" {{- if .Unlisted}} selected{{end}}>Unlisted</option>
+			</select>
+			<p class="hint">Unlisted sounds don't appear in the sound list, but still work as rewards.
+				{{- if .Moderation}} Public sounds are reviewed by a moderator before they appear in the list.{{end}}
+			</p>
+
 			{{- if not .Viewer}}
 			<p class="hint">You are not logged in, so the sound will be uploaded anonymously.</p>
 			{{- end}}

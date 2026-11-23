@@ -40,7 +40,7 @@ func (h *Handler) soundList(c fiber.Ctx) error {
 }
 
 func (h *Handler) uploadPage(c fiber.Ctx) error {
-	return h.renderUpload(c, fiber.StatusOK, "", "")
+	return h.renderUpload(c, fiber.StatusOK, "", "", "")
 }
 
 func (h *Handler) upload(c fiber.Ctx) error {
@@ -48,28 +48,34 @@ func (h *Handler) upload(c fiber.Ctx) error {
 	if v := h.viewer(c); v != nil {
 		userID = v.ID
 	}
-	code := c.FormValue("code")
+	code, visibility := c.FormValue("code"), c.FormValue("visibility")
 	fh, _ := c.FormFile("sound")
 
-	id, _, err := h.opts.Sounds.Save(c.Context(), userID, code, fh)
+	saved, err := h.opts.Sounds.Save(c.Context(), userID, code, visibility, fh)
 	if status, message, ok := userError(err); ok {
-		return h.renderUpload(c, status, code, message)
+		return h.renderUpload(c, status, code, visibility, message)
 	}
 	if err != nil {
 		return err
 	}
 
-	if userID == "" {
-		return c.Redirect().With("success", "Sound uploaded.").To("/sounds")
+	notice := "Sound uploaded."
+	if saved.Visibility == sounds.VisibilityPending {
+		notice = "Sound uploaded. It will appear in the public list once a moderator approves it."
 	}
-	return c.Redirect().With("success", "Sound uploaded. Now choose what triggers it.").
-		To("/rewards/new?upload=" + url.QueryEscape(id))
+	if userID == "" {
+		return c.Redirect().With("success", notice).To("/sounds")
+	}
+	return c.Redirect().With("success", notice+" Now choose what triggers it.").
+		To("/rewards/new?upload=" + url.QueryEscape(saved.ID))
 }
 
-func (h *Handler) renderUpload(c fiber.Ctx, status int, code, message string) error {
+func (h *Handler) renderUpload(c fiber.Ctx, status int, code, visibility, message string) error {
 	return h.render(c, status, "upload", fiber.Map{
 		"Allowed":     h.opts.AnonymousUploads || h.viewer(c) != nil,
 		"Code":        code,
+		"Unlisted":    visibility == "unlisted",
+		"Moderation":  h.opts.Sounds.ModerationEnabled(),
 		"Error":       message,
 		"MaxSize":     formatSize(h.opts.MaxSize),
 		"MaxDuration": h.opts.MaxDuration,

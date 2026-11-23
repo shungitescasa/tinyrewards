@@ -6,6 +6,7 @@
 			<b title="{{.Code}}">{{.Code}}</b>
 			<span class="meta">
 				{{- with .Username}}<a href="/users/{{$.Sound.UserID}}">{{.}}</a>{{else}}anonymous{{end}}
+				{{- if eq .Visibility -1}} · unlisted{{else if eq .Visibility 0}} · pending approval{{end}}
 			</span>
 		</div>
 		{{- if or $.Href $.Delete}}

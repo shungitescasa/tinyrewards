@@ -35,6 +35,9 @@
 					<a href="/users/{{.ID}}">profile</a>
 					<a href="/rewards">rewards</a>
 					<a href="/account">account settings</a>
+					{{- if .Moderator}}
+					<a href="/system/approval">approval</a>
+					{{- end}}
 					<form action="/account/logout" method="post">
 						<button type="submit">sign out</button>
 					</form>

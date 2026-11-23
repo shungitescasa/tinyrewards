@@ -6,6 +6,32 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE KEY users_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS roles (
+    id VARCHAR(32) CHARACTER SET ascii NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    moderate_sounds BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO roles (id, name, moderate_sounds) VALUES
+    ('user', 'User', FALSE),
+    ('moderator', 'Moderator', TRUE),
+    ('admin', 'Admin', TRUE);
+
+CREATE TABLE IF NOT EXISTS role_assigns (
+    role_id VARCHAR(32) CHARACTER SET ascii NOT NULL,
+    user_id CHAR(32) CHARACTER SET ascii NOT NULL,
+    assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (role_id, user_id),
+    KEY role_assigns_user_id (user_id),
+    CONSTRAINT role_assigns_role FOREIGN KEY (role_id) REFERENCES roles (id) ON DELETE CASCADE,
+    CONSTRAINT role_assigns_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO role_assigns (role_id, user_id)
+    SELECT 'user', id FROM users WHERE NOT EXISTS (SELECT 1 FROM role_assigns);
+
 CREATE TABLE IF NOT EXISTS connections (
     user_id CHAR(32) CHARACTER SET ascii NOT NULL,
     platform VARCHAR(32) CHARACTER SET ascii NOT NULL,
@@ -28,9 +54,11 @@ CREATE TABLE IF NOT EXISTS uploads (
     id VARCHAR(32) CHARACTER SET ascii NOT NULL,
     code VARCHAR(255) NOT NULL,
     user_id CHAR(32) CHARACTER SET ascii NULL,
+    visibility TINYINT NOT NULL DEFAULT 1,
     uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY uploads_uploaded_at (uploaded_at, id),
+    KEY uploads_visibility (visibility, uploaded_at, id),
     KEY uploads_user_id (user_id),
     CONSTRAINT uploads_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -80,4 +108,5 @@ BEGIN
     DELETE FROM rewards WHERE user_id = OLD.id;
     DELETE FROM twitch_tokens WHERE user_id = OLD.id;
     DELETE FROM connections WHERE user_id = OLD.id;
+    DELETE FROM role_assigns WHERE user_id = OLD.id;
 END;
