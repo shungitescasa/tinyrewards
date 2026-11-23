@@ -783,7 +783,12 @@ dt {
 }
 
 /** PAGES */
+main:has(>.promo) {
+	padding: 0;
+}
+
 .promo {
+	background: linear-gradient(to top, var(--surface), var(--surface-alt));
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -813,6 +818,10 @@ dt {
 	font-size: 1.15em;
 }
 
+main:has(>.promo) .features {
+	padding: var(--pad);
+}
+
 .features {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -822,6 +831,14 @@ dt {
 .features>.box {
 	gap: var(--pad);
 	padding: var(--gap);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	text-align: center;
+}
+
+.features>.box h2 {
+	font-size: 2em;
 }
 
 .login {
