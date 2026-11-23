@@ -9,15 +9,18 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS roles (
     id VARCHAR(32) CHARACTER SET ascii NOT NULL,
     name VARCHAR(255) NOT NULL,
-    moderate_sounds BOOLEAN NOT NULL DEFAULT FALSE,
+    icon VARCHAR(255) NULL,
+    priority INT NOT NULL DEFAULT 0,
+    permission_moderate_sounds BOOLEAN NOT NULL DEFAULT FALSE,
+    permission_manage_roles BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO roles (id, name, moderate_sounds) VALUES
-    ('user', 'User', FALSE),
-    ('moderator', 'Moderator', TRUE),
-    ('admin', 'Admin', TRUE);
+INSERT IGNORE INTO roles (id, name, icon, priority, permission_moderate_sounds, permission_manage_roles) VALUES
+    ('user', 'User', NULL, 0, FALSE, FALSE),
+    ('moderator', 'Moderator', 'img/roles/moderator.png', 50, TRUE, FALSE),
+    ('admin', 'Admin', 'img/roles/admin.png', 100, TRUE, TRUE);
 
 CREATE TABLE IF NOT EXISTS role_assigns (
     role_id VARCHAR(32) CHARACTER SET ascii NOT NULL,
@@ -28,9 +31,6 @@ CREATE TABLE IF NOT EXISTS role_assigns (
     CONSTRAINT role_assigns_role FOREIGN KEY (role_id) REFERENCES roles (id) ON DELETE CASCADE,
     CONSTRAINT role_assigns_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-INSERT IGNORE INTO role_assigns (role_id, user_id)
-    SELECT 'user', id FROM users WHERE NOT EXISTS (SELECT 1 FROM role_assigns);
 
 CREATE TABLE IF NOT EXISTS connections (
     user_id CHAR(32) CHARACTER SET ascii NOT NULL,

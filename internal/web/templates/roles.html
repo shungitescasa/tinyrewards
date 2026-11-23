@@ -1,0 +1,100 @@
+{{define "title"}}Roles · {{end}}
+
+{{define "main"}}
+<aside>
+	<form action="/system/roles" method="post" class="box">
+		<div class="tab">Assign a role</div>
+		<div class="content form">
+			<input type="hidden" name="csrf" value="{{.CSRF}}">
+			<input type="hidden" name="action" value="assign">
+
+			<label for="user">User</label>
+			<input type="text" id="user" name="user" value="{{.User}}" placeholder="username or id" autocomplete="off"
+				required>
+
+			<label for="role">Role</label>
+			<select id="role" name="role" required>
+				{{- range .Roles}}{{if ne .ID $.DefaultRole}}
+				<option value="{{.ID}}">{{.Name}}</option>
+				{{- end}}{{end}}
+			</select>
+
+			<button type="submit" class="green">assign</button>
+		</div>
+	</form>
+</aside>
+
+<article>
+	<section class="box">
+		<div class="tab">Assigned roles</div>
+		<div class="content">
+			{{- if .Assignments}}
+			<div class="scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>User</th>
+							<th>Role</th>
+							<th>Assigned</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						{{- range .Assignments}}
+						<tr>
+							<td><a href="/users/{{.UserID}}">{{.Username}}</a></td>
+							<td>{{template "role" .Role}}</td>
+							<td>{{date .AssignedAt}}</td>
+							<td>
+								{{- if ne .UserID $.Viewer.ID}}
+								<form action="/system/roles" method="post">
+									<input type="hidden" name="csrf" value="{{$.CSRF}}">
+									<input type="hidden" name="action" value="revoke">
+									<input type="hidden" name="user" value="{{.UserID}}">
+									<input type="hidden" name="role" value="{{.Role.ID}}">
+									<button type="submit" class="red">revoke</button>
+								</form>
+								{{- end}}
+							</td>
+						</tr>
+						{{- end}}
+					</tbody>
+				</table>
+			</div>
+			{{- else}}
+			<p>Nobody has a role besides the default one.</p>
+			{{- end}}
+		</div>
+	</section>
+
+	<section class="box">
+		<div class="tab">Roles</div>
+		<div class="content">
+			<div class="scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>Role</th>
+							<th>ID</th>
+							<th>Priority</th>
+							<th>Moderate sounds</th>
+							<th>Manage roles</th>
+						</tr>
+					</thead>
+					<tbody>
+						{{- range .Roles}}
+						<tr>
+							<td>{{template "role" .}}{{if eq .ID $.DefaultRole}} <span class="meta">default</span>{{end}}</td>
+							<td><code>{{.ID}}</code></td>
+							<td>{{.Priority}}</td>
+							<td>{{if .Permissions.ModerateSounds}}yes{{else}}no{{end}}</td>
+							<td>{{if .Permissions.ManageRoles}}yes{{else}}no{{end}}</td>
+						</tr>
+						{{- end}}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</section>
+</article>
+{{end}}

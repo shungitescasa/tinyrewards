@@ -38,6 +38,9 @@
 					{{- if .Moderator}}
 					<a href="/system/approval">approval</a>
 					{{- end}}
+					{{- if .RoleManager}}
+					<a href="/system/roles">roles</a>
+					{{- end}}
 					<form action="/account/logout" method="post">
 						<button type="submit">sign out</button>
 					</form>

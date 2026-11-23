@@ -92,6 +92,14 @@ func (h *Handler) Delete(c fiber.Ctx) error {
 }
 
 func (h *Handler) RequireModerator(c fiber.Ctx) (User, error) {
+	return h.requirePermission(c, User.Moderator, "only moderators can do this")
+}
+
+func (h *Handler) RequireRoleManager(c fiber.Ctx) (User, error) {
+	return h.requirePermission(c, User.RoleManager, "only admins can do this")
+}
+
+func (h *Handler) requirePermission(c fiber.Ctx, allowed func(User) bool, denied string) (User, error) {
 	if err := h.Authenticate(c); err != nil {
 		return User{}, err
 	}
@@ -100,11 +108,11 @@ func (h *Handler) RequireModerator(c fiber.Ctx) (User, error) {
 		return User{}, fiber.NewError(fiber.StatusUnauthorized, "user no longer exists")
 	}
 	if err != nil {
-		log.Printf("account: loading moderator: %v", err)
+		log.Printf("account: loading user permissions: %v", err)
 		return User{}, fiber.ErrInternalServerError
 	}
-	if !u.Moderator() {
-		return User{}, fiber.NewError(fiber.StatusForbidden, "only moderators can do this")
+	if !allowed(u) {
+		return User{}, fiber.NewError(fiber.StatusForbidden, denied)
 	}
 	return u, nil
 }

@@ -35,7 +35,7 @@ var files embed.FS
 
 const assetMaxAge = 365 * 24 * 60 * 60
 
-var pages = []string{"index", "sounds", "upload", "rewards", "reward", "login", "account", "account_delete", "user", "approval", "error"}
+var pages = []string{"index", "sounds", "upload", "rewards", "reward", "login", "account", "account_delete", "user", "approval", "roles", "error"}
 
 var funcs = template.FuncMap{
 	"date": func(t time.Time) string {
@@ -112,7 +112,7 @@ func NewHandler(opts Options) *Handler {
 	for _, name := range pages {
 		h.templates[name] = template.Must(template.New(name).
 			Funcs(funcs).
-			Funcs(template.FuncMap{"asset": h.asset}).
+			Funcs(template.FuncMap{"asset": h.asset, "icon": h.icon}).
 			ParseFS(files, "templates/layout.html", "templates/partials.html", "templates/"+name+".html"))
 	}
 	return h
@@ -123,6 +123,16 @@ func (h *Handler) asset(name string) (string, error) {
 		return link, nil
 	}
 	return "", fmt.Errorf("unknown asset %q", name)
+}
+
+func (h *Handler) icon(path string) string {
+	if link, ok := h.assets[strings.TrimPrefix(path, "/")]; ok {
+		return link
+	}
+	if strings.HasPrefix(path, "/") || strings.HasPrefix(path, "https://") || strings.HasPrefix(path, "http://") {
+		return path
+	}
+	return ""
 }
 
 func (h *Handler) Register(app fiber.Router) {
@@ -150,6 +160,8 @@ func (h *Handler) Register(app fiber.Router) {
 	app.Delete("/account/delete", sameOrigin, middleware.Negotiate(h.deleteAccount, h.opts.Accounts.Delete))
 	app.Get("/system/approval", middleware.Negotiate(h.approvalPage, h.approvalJSON))
 	app.Post("/system/approval", h.opts.Accounts.CSRF, middleware.Negotiate(h.moderate, h.moderateJSON))
+	app.Get("/system/roles", middleware.Negotiate(h.rolesPage, h.rolesJSON))
+	app.Post("/system/roles", h.opts.Accounts.CSRF, middleware.Negotiate(h.changeRole, h.changeRoleJSON))
 	app.Get("/users/:id", middleware.Negotiate(h.userPage, h.userJSON))
 }
 

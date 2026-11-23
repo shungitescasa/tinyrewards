@@ -26,27 +26,39 @@ type User struct {
 	ID          string      `json:"id"`
 	Username    string      `json:"username"`
 	JoinedAt    time.Time   `json:"joined_at"`
+	Roles       []Role      `json:"roles"`
 	Permissions Permissions `json:"permissions"`
-}
-
-type Permissions struct {
-	ModerateSounds bool `json:"moderate_sounds"`
 }
 
 func (u User) Moderator() bool {
 	return u.Permissions.ModerateSounds
 }
 
-const selectUser = `SELECT u.id, u.username, u.joined_at, COALESCE(MAX(r.moderate_sounds), FALSE)
-	FROM users u
-	LEFT JOIN role_assigns ra ON ra.user_id = u.id
-	LEFT JOIN roles r ON r.id = ra.role_id
-	`
+func (u User) RoleManager() bool {
+	return u.Permissions.ManageRoles
+}
 
-func scanUser(row *sql.Row) (User, error) {
-	var u User
-	err := row.Scan(&u.ID, &u.Username, &u.JoinedAt, &u.Permissions.ModerateSounds)
-	return u, err
+func (u User) Badge() *Role {
+	for i, r := range u.Roles {
+		if r.ID != DefaultRole && r.Icon != "" {
+			return &u.Roles[i]
+		}
+	}
+	return nil
+}
+
+func (h *Handler) withRoles(ctx context.Context, u User, err error) (User, error) {
+	if err != nil {
+		return u, err
+	}
+	u.Roles, err = h.userRoles(ctx, u.ID)
+	if err != nil {
+		return User{}, err
+	}
+	for _, r := range u.Roles {
+		u.Permissions = u.Permissions.merge(r.Permissions)
+	}
+	return u, nil
 }
 
 func (h *Handler) login(ctx context.Context, platform, aliasID, username string) (User, error) {
@@ -71,16 +83,24 @@ func (h *Handler) login(ctx context.Context, platform, aliasID, username string)
 }
 
 func (h *Handler) findByConnection(ctx context.Context, platform, aliasID string) (User, error) {
-	return scanUser(h.db.QueryRowContext(ctx,
-		selectUser+`JOIN connections c ON c.user_id = u.id
-		 WHERE c.platform = ? AND c.alias_id = ?
-		 GROUP BY u.id, u.username, u.joined_at`,
+	var u User
+	err := h.db.QueryRowContext(ctx,
+		`SELECT u.id, u.username, u.joined_at
+		 FROM connections c
+		 JOIN users u ON u.id = c.user_id
+		 WHERE c.platform = ? AND c.alias_id = ?`,
 		platform, aliasID,
-	))
+	).Scan(&u.ID, &u.Username, &u.JoinedAt)
+	return h.withRoles(ctx, u, err)
 }
 
 func (h *Handler) FindByID(ctx context.Context, id string) (User, error) {
-	return scanUser(h.db.QueryRowContext(ctx, selectUser+`WHERE u.id = ? GROUP BY u.id, u.username, u.joined_at`, id))
+	var u User
+	err := h.db.QueryRowContext(ctx,
+		`SELECT id, username, joined_at FROM users WHERE id = ?`,
+		id,
+	).Scan(&u.ID, &u.Username, &u.JoinedAt)
+	return h.withRoles(ctx, u, err)
 }
 
 type Connection struct {

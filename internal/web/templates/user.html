@@ -7,7 +7,10 @@
 {{define "main"}}
 <aside>
 	<section class="box">
-		<div class="tab">{{.User.Username}}</div>
+		<div class="tab">
+			{{- with .User.Badge}}{{$name := .Name}}{{with icon .Icon}}<img src="{{.}}" alt="{{$name}}" title="{{$name}}"
+				class="role-icon"> {{end}}{{end -}}
+			{{.User.Username}}</div>
 		<div class="content">
 			<dl>
 				<dt>Joined</dt>

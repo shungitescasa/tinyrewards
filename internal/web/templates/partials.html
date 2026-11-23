@@ -127,3 +127,6 @@
 </nav>
 {{- end}}
 {{- end}}
+{{define "role" -}}
+{{with icon .Icon}}<img src="{{.}}" alt="" class="role-icon"> {{end}}{{.Name}}
+{{- end}}
