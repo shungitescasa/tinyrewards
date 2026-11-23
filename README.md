@@ -1,3 +1,3 @@
-# TinyRewards
+# ![](/internal/web/static/img/brand/mini.webp) TinyRewards
 
-TBA
+An easy-to-install reward provider for Twitch channel points/Twitch chat.

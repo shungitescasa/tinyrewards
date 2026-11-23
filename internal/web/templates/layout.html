@@ -5,8 +5,10 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>{{block "title" .}}{{end}}TinyRewards</title>
+	<title>{{block "title" .}}{{end}}{{.Instance.Name}}</title>
+	<meta name="description" content="{{.Instance.Subtitle}}">
 	<link rel="stylesheet" href="{{asset `style.css`}}">
+	<link rel="shortcut icon" href="{{asset `favicon.ico`}}" type="image/x-icon">
 	<script src="{{asset `player.js`}}" defer></script>
 	{{- block "head" .}}{{end}}
 </head>
@@ -15,7 +17,11 @@
 	<header>
 		<nav>
 			<ul>
-				<li><a href="/" class="brand">TinyRewards</a></li>
+				<li>
+					<a href="/" class="brand">
+						<img src="/static/img/brand/mini.webp" alt="{{.Instance.Name}}">
+					</a>
+				</li>
 				<li><a href="/sounds">sounds</a></li>
 				<li><a href="/sounds/upload">upload</a></li>
 				{{- if .Viewer}}
@@ -55,8 +61,24 @@
 	</main>
 
 	<footer>
-		<span>TinyRewards</span>
-		<a href="https://git.shungites.casa/tiny/rewards">source code</a>
+		<p>
+			Powered by TinyRewards.
+			{{- with .Instance}}
+			{{- if .MaintainerName}}
+			Maintained by {{if .MaintainerURL}}<a href="{{.MaintainerURL}}"
+				target="_blank">{{.MaintainerName}}</a>{{else}}{{.MaintainerName}}{{end}}.
+			{{- end}}
+			{{- end}}
+		</p>
+		<nav class="footer-links">
+			{{- with .Instance.TOS}}
+			<a href="{{.}}">terms of service</a>
+			{{- end}}
+			{{- with .Instance.PrivacyPolicy}}
+			<a href="{{.}}">privacy policy</a>
+			{{- end}}
+			<a href="https://github.com/shungitescasa/tinyrewards">source code</a>
+		</nav>
 	</footer>
 </body>
 

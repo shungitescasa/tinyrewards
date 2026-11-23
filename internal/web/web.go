@@ -22,6 +22,7 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/static"
 
 	"git.shungites.casa/tiny/rewards/internal/account"
+	"git.shungites.casa/tiny/rewards/internal/config"
 	"git.shungites.casa/tiny/rewards/internal/emotes"
 	"git.shungites.casa/tiny/rewards/internal/middleware"
 	"git.shungites.casa/tiny/rewards/internal/rewards"
@@ -66,6 +67,7 @@ type Options struct {
 	Rewards          *rewards.Handler
 	Emotes           *emotes.Checker
 	Twitch           *twitch.Client
+	Instance         config.Instance
 	PublicURL        string
 	MaxSize          int64
 	MaxDuration      time.Duration
@@ -157,6 +159,7 @@ func (h *Handler) render(c fiber.Ctx, status int, name string, data fiber.Map) e
 	if data == nil {
 		data = fiber.Map{}
 	}
+	data["Instance"] = h.opts.Instance
 	data["Viewer"] = h.viewer(c)
 	data["Messages"] = c.Redirect().Messages()
 

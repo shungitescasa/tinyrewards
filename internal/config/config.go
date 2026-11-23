@@ -84,7 +84,17 @@ type Auth struct {
 	TokenTTL time.Duration
 }
 
+type Instance struct {
+	Name           string
+	Subtitle       string
+	MaintainerName string
+	MaintainerURL  string
+	TOS            string
+	PrivacyPolicy  string
+}
+
 type Config struct {
+	Instance   Instance
 	Server     Server
 	Database   Database
 	Files      Files
@@ -98,6 +108,10 @@ type Config struct {
 
 func Default() Config {
 	return Config{
+		Instance: Instance{
+			Name:     "TinyRewards",
+			Subtitle: "Sound alerts for your Twitch chat.",
+		},
 		Server: Server{
 			Address: ":3000",
 		},
@@ -138,6 +152,14 @@ func Load(path string, required bool) (Config, error) {
 		}
 		return cfg, fmt.Errorf("load %s: %w", path, err)
 	}
+
+	instance := file.Section("instance")
+	cfg.Instance.Name = strings.TrimSpace(instance.Key("name").MustString(cfg.Instance.Name))
+	cfg.Instance.Subtitle = strings.TrimSpace(instance.Key("subtitle").MustString(cfg.Instance.Subtitle))
+	cfg.Instance.MaintainerName = strings.TrimSpace(instance.Key("maintainer_name").MustString(cfg.Instance.MaintainerName))
+	cfg.Instance.MaintainerURL = strings.TrimSpace(instance.Key("maintainer_url").MustString(cfg.Instance.MaintainerURL))
+	cfg.Instance.TOS = strings.TrimSpace(instance.Key("tos").MustString(cfg.Instance.TOS))
+	cfg.Instance.PrivacyPolicy = strings.TrimSpace(instance.Key("privacy_policy").MustString(cfg.Instance.PrivacyPolicy))
 
 	server := file.Section("server")
 	cfg.Server.Address = server.Key("address").MustString(cfg.Server.Address)
@@ -259,6 +281,26 @@ func (c Config) validate() error {
 		return errors.New("auth.token_ttl must be positive")
 	case c.Auth.Secret != "" && len(c.Auth.Secret) < MinSecretLength:
 		return fmt.Errorf("auth.secret must be at least %d bytes", MinSecretLength)
+	}
+
+	if c.Instance.Name == "" {
+		return errors.New("instance.name must not be empty")
+	}
+	for key, value := range map[string]string{
+		"instance.maintainer_url": c.Instance.MaintainerURL,
+		"instance.tos":            c.Instance.TOS,
+		"instance.privacy_policy": c.Instance.PrivacyPolicy,
+	} {
+		if value == "" {
+			continue
+		}
+		u, err := url.Parse(value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", key, err)
+		}
+		if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("%s must be an absolute http(s) URL, got %q", key, value)
+		}
 	}
 
 	if c.Server.PublicURL != "" {

@@ -140,6 +140,7 @@ func main() {
 		Rewards:          rewardHandler,
 		Emotes:           emoteChecker,
 		Twitch:           twitchClient,
+		Instance:         cfg.Instance,
 		PublicURL:        cfg.Server.PublicURL,
 		MaxSize:          cfg.Files.MaxSize,
 		MaxDuration:      cfg.Files.MaxDuration,

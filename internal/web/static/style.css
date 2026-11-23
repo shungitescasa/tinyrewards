@@ -59,6 +59,12 @@ a:not(.button):hover {
 	text-decoration: none;
 }
 
+a:has(>img:only-child):not(.button):hover {
+	background: initial;
+	color: initial;
+	text-decoration: none;
+}
+
 code {
 	font-family: monospace;
 	overflow-wrap: anywhere;
@@ -91,6 +97,12 @@ header {
 footer {
 	border-top: 2px solid var(--line);
 	color: var(--muted);
+}
+
+.footer-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--gap);
 }
 
 header>nav {
@@ -770,6 +782,5 @@ dt {
 }
 
 .error {
-	margin-top: 12vh;
 	text-align: center;
 }

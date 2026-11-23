@@ -2,8 +2,10 @@
 
 {{define "main"}}
 <section class="promo">
-	<h1>TinyRewards</h1>
-	<p>Sound alerts for your Twitch chat.</p>
+	<h1>
+		<img src="/static/img/brand/big.webp" alt="{{.Instance.Name}}" title="{{.Instance.Name}}">
+	</h1>
+	<p>{{.Instance.Subtitle}}</p>
 	<div class="actions">
 		{{- if .Viewer}}
 		<a href="/rewards" class="button">your rewards</a>
