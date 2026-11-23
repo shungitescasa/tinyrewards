@@ -5,12 +5,17 @@
 		<div class="title">
 			<b title="{{.Code}}">{{.Code}}</b>
 			<span class="meta">
-				{{- with .Username}}<a href="/users/{{$.Sound.UserID}}">{{.}}</a>{{else}}anonymous{{end}} · {{date
-				.UploadedAt -}}
+				{{- with .Username}}<a href="/users/{{$.Sound.UserID}}">{{.}}</a>{{else}}anonymous{{end}}
 			</span>
 		</div>
 		{{- with $.Href}}
-		<a href="{{.}}" class="button">{{$.Label}}</a>
+		<a href="{{.}}" class="button">
+			{{- with $.Icon }}
+			<img src="{{.}}" alt="{{$.Label}}" title="{{$.Label}}">
+			{{- else}}
+			{{$.Label}}
+			{{- end}}
+		</a>
 		{{- end}}
 	</div>
 	<div class="controls">
@@ -30,7 +35,8 @@
 
 {{define "sound"}}
 <div class="sound box">
-	{{template "player" dict "Sound" . "Href" (printf "/rewards/new?upload=%s" .ID) "Label" "use as reward"}}
+	{{template "player" dict "Sound" . "Href" (printf "/rewards/new?upload=%s" .ID) "Label" "use as reward" "Icon"
+	(asset `img/icons/add.png`)}}
 </div>
 {{- end}}
 

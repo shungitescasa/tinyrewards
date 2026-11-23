@@ -31,14 +31,14 @@
 		<div class="content">
 			{{- if .Upload}}
 			{{template "player" dict "Sound" .Upload "Href" (printf "/rewards/new?type=%s" (urlquery .Type)) "Label"
-			"change"}}
+			"change" "Icon" (asset `img/icons/undo.png`)}}
 			{{- else if .Uploads}}
 			<p class="hint">Your recent uploads</p>
 			<ul class="picker">
 				{{- range .Uploads}}
 				<li>
 					{{template "player" dict "Sound" . "Href" (printf "/rewards/new?type=%s&upload=%s" (urlquery $.Type)
-					(urlquery .ID)) "Label" "select"}}
+					(urlquery .ID)) "Label" "select" "Icon" (asset `img/icons/select.png`)}}
 				</li>
 				{{- end}}
 			</ul>
