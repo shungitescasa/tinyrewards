@@ -75,3 +75,18 @@ func (h *Handler) renderUpload(c fiber.Ctx, status int, code, message string) er
 		"MaxDuration": h.opts.MaxDuration,
 	})
 }
+
+func (h *Handler) deleteSound(c fiber.Ctx) error {
+	v := h.viewer(c)
+	if v == nil {
+		return toLogin(c)
+	}
+	err := h.opts.Sounds.Remove(c.Context(), c.FormValue("id"), v.ID)
+	if _, message, ok := userError(err); ok {
+		return c.Redirect().With("error", message).Back("/sounds")
+	}
+	if err != nil {
+		return err
+	}
+	return c.Redirect().With("success", "Sound deleted.").Back("/sounds")
+}

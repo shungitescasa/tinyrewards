@@ -475,19 +475,26 @@ details[open]>summary {
 	white-space: nowrap;
 }
 
-.player>.info>.button {
+.player>.info>.buttons {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--pad) / 2);
+	flex-shrink: 0;
+}
+
+.player>.info .button {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	flex-shrink: 0;
 }
 
-.player>.info>.button:has(img) {
+.player>.info .button:has(img) {
 	aspect-ratio: 1;
 	padding: calc(var(--pad) / 2);
 }
 
-.player>.info>.button img {
+.player>.info .button img {
 	display: block;
 	width: 16px;
 	height: 16px;

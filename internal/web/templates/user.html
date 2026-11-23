@@ -42,7 +42,7 @@
 		<div class="content">
 			{{- if .Sounds}}
 			<div class="sounds">
-				{{- range .Sounds}}{{template "sound" .}}{{end}}
+				{{- range .Sounds}}{{template "sound" dict "Sound" . "Viewer" $.Viewer "CSRF" $.CSRF}}{{end}}
 			</div>
 			{{template "pagination" .Pager}}
 			{{- else}}

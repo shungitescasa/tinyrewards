@@ -55,6 +55,12 @@ var funcs = template.FuncMap{
 		}
 		return m, nil
 	},
+	"deref": func(s *string) string {
+		if s == nil {
+			return ""
+		}
+		return *s
+	},
 	"emote": func(data string) string {
 		provider, id, _ := strings.Cut(data, ":")
 		return emotes.ImageURL(provider, id)
@@ -126,6 +132,8 @@ func (h *Handler) Register(app fiber.Router) {
 	app.Get("/sounds", middleware.Negotiate(h.soundList, h.opts.Sounds.List))
 	app.Get("/sounds/upload", h.uploadPage)
 	app.Post("/sounds/upload", sameOrigin, middleware.Negotiate(h.upload, h.opts.Sounds.Upload))
+	app.Post("/sounds/delete", h.opts.Accounts.CSRF, middleware.Negotiate(h.deleteSound, h.opts.Sounds.Delete))
+	app.Delete("/sounds/delete", h.opts.Accounts.CSRF, middleware.Negotiate(h.deleteSound, h.opts.Sounds.Delete))
 	app.Get("/rewards", middleware.Negotiate(h.rewardList, h.opts.Rewards.Mine))
 	app.Get("/rewards/new", h.rewardPage)
 	app.Post("/rewards/new", sameOrigin, middleware.Negotiate(h.createReward, h.opts.Rewards.Add))
@@ -164,6 +172,7 @@ func (h *Handler) render(c fiber.Ctx, status int, name string, data fiber.Map) e
 	}
 	data["Instance"] = h.opts.Instance
 	data["Viewer"] = h.viewer(c)
+	data["CSRF"] = h.opts.Accounts.CSRFToken(c)
 	data["Messages"] = c.Redirect().Messages()
 
 	var buf bytes.Buffer

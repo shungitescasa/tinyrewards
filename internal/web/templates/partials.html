@@ -8,14 +8,26 @@
 				{{- with .Username}}<a href="/users/{{$.Sound.UserID}}">{{.}}</a>{{else}}anonymous{{end}}
 			</span>
 		</div>
-		{{- with $.Href}}
-		<a href="{{.}}" class="button">
-			{{- with $.Icon }}
-			<img src="{{.}}" alt="{{$.Label}}" title="{{$.Label}}">
-			{{- else}}
-			{{$.Label}}
+		{{- if or $.Href $.Delete}}
+		<div class="buttons">
+			{{- with $.Href}}
+			<a href="{{.}}" class="button">
+				{{- with $.Icon }}
+				<img src="{{.}}" alt="{{$.Label}}" title="{{$.Label}}">
+				{{- else}}
+				{{$.Label}}
+				{{- end}}
+			</a>
 			{{- end}}
-		</a>
+			{{- if $.Delete}}
+			<form action="/sounds/delete" method="post">
+				<input type="hidden" name="id" value="{{$.Sound.ID}}">
+				<input type="hidden" name="csrf" value="{{$.CSRF}}">
+				<button type="submit" class="button red" title="delete"><img src="{{asset `img/icons/delete.png`}}"
+						alt="delete"></button>
+			</form>
+			{{- end}}
+		</div>
 		{{- end}}
 	</div>
 	<div class="controls">
@@ -35,8 +47,10 @@
 
 {{define "sound"}}
 <div class="sound box">
-	{{template "player" dict "Sound" . "Href" (printf "/rewards/new?upload=%s" .ID) "Label" "use as reward" "Icon"
-	(asset `img/icons/add.png`)}}
+	{{template "player" dict "Sound" .Sound "Href" (printf "/rewards/new?upload=%s" .Sound.ID) "Label" "use as reward"
+	"Icon"
+	(asset `img/icons/add.png`) "Delete" (and .Viewer .Sound.UserID (eq .Viewer.ID (deref .Sound.UserID))) "CSRF"
+	.CSRF}}
 </div>
 {{- end}}
 
