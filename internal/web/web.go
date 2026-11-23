@@ -35,7 +35,7 @@ var files embed.FS
 
 const assetMaxAge = 365 * 24 * 60 * 60
 
-var pages = []string{"index", "sounds", "upload", "rewards", "reward", "login", "account", "user", "error"}
+var pages = []string{"index", "sounds", "upload", "rewards", "reward", "login", "account", "account_delete", "user", "error"}
 
 var funcs = template.FuncMap{
 	"date": func(t time.Time) string {
@@ -137,6 +137,9 @@ func (h *Handler) Register(app fiber.Router) {
 		app.Get("/account/login/twitch", h.opts.Accounts.LoginTwitch)
 	}
 	app.Post("/account/logout", sameOrigin, h.opts.Accounts.Logout)
+	app.Get("/account/delete", h.deleteAccountPage)
+	app.Post("/account/delete", sameOrigin, middleware.Negotiate(h.deleteAccount, h.opts.Accounts.Delete))
+	app.Delete("/account/delete", sameOrigin, middleware.Negotiate(h.deleteAccount, h.opts.Accounts.Delete))
 	app.Get("/users/:id", middleware.Negotiate(h.userPage, h.userJSON))
 }
 

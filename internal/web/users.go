@@ -104,3 +104,22 @@ func (h *Handler) userJSON(c fiber.Ctx) error {
 		"sounds":  uploads,
 	})
 }
+
+func (h *Handler) deleteAccountPage(c fiber.Ctx) error {
+	if h.viewer(c) == nil {
+		return toLogin(c)
+	}
+	return h.render(c, fiber.StatusOK, "account_delete", nil)
+}
+
+func (h *Handler) deleteAccount(c fiber.Ctx) error {
+	v := h.viewer(c)
+	if v == nil {
+		return toLogin(c)
+	}
+	if err := h.opts.Accounts.Remove(c.Context(), v.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	h.opts.Accounts.ClearSession(c)
+	return c.Redirect().With("success", "Your account has been deleted.").To("/")
+}

@@ -30,8 +30,12 @@ func (h *Handler) SessionUser(c fiber.Ctx) (*User, error) {
 }
 
 func (h *Handler) Logout(c fiber.Ctx) error {
-	h.setSession(c, "", time.Time{})
+	h.ClearSession(c)
 	return c.Redirect().To("/")
+}
+
+func (h *Handler) ClearSession(c fiber.Ctx) {
+	h.setSession(c, "", time.Time{})
 }
 
 func (h *Handler) setSession(c fiber.Ctx, token string, expires time.Time) {

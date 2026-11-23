@@ -75,3 +75,18 @@ func (h *Handler) Me(c fiber.Ctx) error {
 	}
 	return c.JSON(u)
 }
+
+func (h *Handler) Delete(c fiber.Ctx) error {
+	if err := h.Authenticate(c); err != nil {
+		return err
+	}
+	if err := h.Remove(c.Context(), UserID(c)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fiber.NewError(fiber.StatusUnauthorized, "user no longer exists")
+		}
+		log.Printf("account: delete: %v", err)
+		return fiber.ErrInternalServerError
+	}
+	h.ClearSession(c)
+	return c.SendStatus(fiber.StatusNoContent)
+}

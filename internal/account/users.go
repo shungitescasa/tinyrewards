@@ -122,3 +122,14 @@ func isDuplicate(err error) bool {
 	var me *mysql.MySQLError
 	return errors.As(err, &me) && me.Number == mysqlDuplicateEntry
 }
+
+func (h *Handler) Remove(ctx context.Context, userID string) error {
+	res, err := h.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}

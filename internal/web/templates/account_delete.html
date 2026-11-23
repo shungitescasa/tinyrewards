@@ -1,0 +1,22 @@
+{{define "title"}}Delete account · {{end}}
+
+{{define "main"}}
+<article class="narrow">
+	<h1>Delete account</h1>
+
+	<section class="box">
+		<div class="tab">Are you sure?</div>
+		<div class="content">
+			<p>This permanently deletes the account <b>{{.Viewer.Username}}</b> along with its rewards, connections and
+				tokens. It cannot be undone.</p>
+			<p>Your uploaded sounds will stay on the site, but they will be shown as anonymous.</p>
+			<div class="actions">
+				<form action="/account/delete" method="post">
+					<button type="submit" class="red">Delete my account</button>
+				</form>
+				<a href="/account" class="button outline">Cancel</a>
+			</div>
+		</div>
+	</section>
+</article>
+{{end}}

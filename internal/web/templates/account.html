@@ -41,13 +41,18 @@
 				<summary>Access token</summary>
 				<input type="text" value="{{.Token}}" aria-label="access token" readonly>
 			</details>
-			<p class="hint">Send it as <code>Authorization: Bearer &lt;token&gt;</code> with <code>Accept: application/json</code> to get JSON from any page.
-				Keep it secret.</p>
+			<p class="hint">Send it as <code>Authorization: Bearer &lt;token&gt;</code> with
+				<code>Accept: application/json</code> to get JSON from any page.
+				Keep it secret.
+			</p>
 		</div>
 	</section>
 
-	<form action="/account/logout" method="post">
-		<button type="submit" class="red">Sign out</button>
-	</form>
+	<div class="actions">
+		<form action="/account/logout" method="post">
+			<button type="submit" class="red">Sign out</button>
+		</form>
+		<a href="/account/delete" class="button red">Delete account</a>
+	</div>
 </article>
 {{end}}

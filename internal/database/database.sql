@@ -71,3 +71,13 @@ CREATE TABLE IF NOT EXISTS twitch_tokens (
     PRIMARY KEY (user_id),
     CONSTRAINT twitch_tokens_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TRIGGER IF EXISTS users_before_delete;
+
+CREATE TRIGGER users_before_delete BEFORE DELETE ON users FOR EACH ROW
+BEGIN
+    UPDATE uploads SET user_id = NULL WHERE user_id = OLD.id;
+    DELETE FROM rewards WHERE user_id = OLD.id;
+    DELETE FROM twitch_tokens WHERE user_id = OLD.id;
+    DELETE FROM connections WHERE user_id = OLD.id;
+END;
